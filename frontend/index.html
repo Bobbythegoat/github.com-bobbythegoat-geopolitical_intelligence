@@ -1,0 +1,2622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GeoInt Terminal</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #1c2128;
+      --border:    #30363d;
+      --border2:   #21262d;
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+      --muted2:    #6e7681;
+      --accent:    #388bfd;
+      --green:     #3fb950;
+      --yellow:    #d29922;
+      --orange:    #e3812a;
+      --red:       #f85149;
+      --purple:    #bc8cff;
+      --teal:      #39d353;
+
+      --tier-critical: #f85149;
+      --tier-high:     #d29922;
+      --tier-monitor:  #388bfd;
+
+      --stage-emerging:   #3fb950;
+      --stage-developing: #d29922;
+      --stage-peak:       #f85149;
+      --stage-declining:  #8b949e;
+
+      --bucket-early:    #3fb950;
+      --bucket-research: #388bfd;
+      --bucket-watch:    #8b949e;
+      --bucket-wait:     #d29922;
+      --bucket-avoid:    #f85149;
+      --bucket-reduce:   #e3812a;
+      --bucket-exit:     #bc8cff;
+
+      --type-geopolitical: #f85149;
+      --type-macro:        #d29922;
+      --type-company:      #388bfd;
+      --type-sector:       #3fb950;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "SF Mono", monospace;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+      font-size: 13px;
+    }
+
+    /* ─── TOP BAR ─────────────────────────────────────────────────────── */
+    #topbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 20px;
+      height: 48px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      z-index: 20;
+    }
+    #topbar .logo {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--accent);
+      letter-spacing: .6px;
+      text-transform: uppercase;
+      white-space: nowrap;
+      margin-right: 8px;
+    }
+    #topbar .logo small { font-weight: 400; color: var(--muted); font-size: 10px; letter-spacing: 0; }
+    #market-status { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--muted); white-space: nowrap; }
+    #market-status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
+
+    #global-search {
+      flex: 1;
+      max-width: 340px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 12px;
+      font-family: inherit;
+    }
+    #global-search:focus { outline: none; border-color: var(--accent); }
+    #global-search::placeholder { color: var(--muted2); }
+
+    .topbar-filters {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: nowrap;
+    }
+    .topbar-filters select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 5px;
+      padding: 4px 6px;
+      font-size: 11px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .topbar-filters select:focus { outline: none; border-color: var(--accent); color: var(--text); }
+
+    #topbar-right { display: flex; gap: 6px; align-items: center; margin-left: auto; }
+
+    /* ─── BODY LAYOUT ─────────────────────────────────────────────────── */
+    #body {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ─── SIDEBAR ─────────────────────────────────────────────────────── */
+    #sidebar {
+      width: 200px;
+      min-width: 200px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #sidebar nav { padding: 6px 0; border-bottom: 1px solid var(--border); }
+    #sidebar nav a {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 12px;
+      border-left: 3px solid transparent;
+      transition: all .12s;
+    }
+    #sidebar nav a:hover   { color: var(--text); background: rgba(255,255,255,.03); }
+    #sidebar nav a.active  { color: var(--text); border-left-color: var(--accent); background: rgba(56,139,253,.08); }
+    #sidebar nav a .icon   { font-size: 14px; width: 18px; text-align: center; }
+    #sidebar nav a .badge  {
+      margin-left: auto;
+      background: var(--red);
+      color: #fff;
+      font-size: 9px;
+      border-radius: 8px;
+      padding: 1px 5px;
+      font-weight: 700;
+    }
+
+    #sidebar-live {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+    #sidebar-live .section-label {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: .7px;
+      color: var(--muted2);
+      padding: 4px 14px;
+      margin-bottom: 2px;
+    }
+    .live-alert-card {
+      padding: 7px 14px;
+      border-left: 3px solid transparent;
+      cursor: pointer;
+      transition: background .1s;
+    }
+    .live-alert-card:hover { background: rgba(255,255,255,.03); }
+    .live-alert-card .lat { font-size: 10px; font-weight: 700; }
+    .live-alert-card .ltt { font-size: 11px; color: var(--text); line-height: 1.3; margin-top: 2px; }
+    .live-alert-card .lts { font-size: 10px; color: var(--muted); margin-top: 2px; }
+    .live-alert-card.Critical { border-left-color: var(--tier-critical); }
+    .live-alert-card.High     { border-left-color: var(--tier-high); }
+    .live-alert-card.Monitor  { border-left-color: var(--tier-monitor); }
+
+    /* ─── MAIN CONTENT ────────────────────────────────────────────────── */
+    #main {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    #page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 22px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    #page-header h2 { font-size: 14px; font-weight: 600; }
+    #page-header .hactions { display: flex; gap: 6px; }
+    #content { padding: 20px 22px; flex: 1; }
+
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* ─── FILTER BAR ──────────────────────────────────────────────────── */
+    .filter-bar {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .filter-bar select,
+    .filter-bar input {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 5px;
+      padding: 5px 8px;
+      font-size: 11px;
+      font-family: inherit;
+    }
+    .filter-bar select:focus,
+    .filter-bar input:focus { outline: none; border-color: var(--accent); }
+    .filter-bar input { min-width: 140px; }
+    .filter-bar input::placeholder { color: var(--muted2); }
+    .filter-label {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+
+    /* ─── CARDS ───────────────────────────────────────────────────────── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .stat-card .label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+    .stat-card .value { font-size: 26px; font-weight: 700; margin-top: 3px; }
+    .stat-card .sub   { font-size: 10px; color: var(--muted); margin-top: 3px; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .card-header h3 { font-size: 12px; font-weight: 600; }
+    .card-body { padding: 14px; }
+
+    /* ─── TABLES ──────────────────────────────────────────────────────── */
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th {
+      text-align: left;
+      padding: 7px 10px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    td { padding: 9px 10px; border-bottom: 1px solid rgba(48,54,61,.4); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr.clickable:hover td { background: rgba(255,255,255,.025); cursor: pointer; }
+
+    /* ─── BADGES ──────────────────────────────────────────────────────── */
+    .badge {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .tier-Critical { background: rgba(248,81,73,.18); color: var(--tier-critical); }
+    .tier-High     { background: rgba(210,153,34,.18); color: var(--tier-high); }
+    .tier-Monitor  { background: rgba(56,139,253,.18); color: var(--tier-monitor); }
+
+    .stage-emerging   { background: rgba(63,185,80,.14); color: var(--stage-emerging); }
+    .stage-developing { background: rgba(210,153,34,.14); color: var(--stage-developing); }
+    .stage-peak       { background: rgba(248,81,73,.14); color: var(--stage-peak); }
+    .stage-declining  { background: rgba(139,148,158,.14); color: var(--stage-declining); }
+
+    .type-geopolitical { background: rgba(248,81,73,.14); color: var(--type-geopolitical); }
+    .type-macro        { background: rgba(210,153,34,.14); color: var(--type-macro); }
+    .type-company      { background: rgba(56,139,253,.14); color: var(--type-company); }
+    .type-sector       { background: rgba(63,185,80,.14); color: var(--type-sector); }
+
+    .bucket-early    { background: rgba(63,185,80,.14); color: var(--bucket-early); }
+    .bucket-research { background: rgba(56,139,253,.14); color: var(--bucket-research); }
+    .bucket-watch    { background: rgba(139,148,158,.14); color: var(--bucket-watch); }
+    .bucket-wait     { background: rgba(210,153,34,.14); color: var(--bucket-wait); }
+    .bucket-avoid    { background: rgba(248,81,73,.14); color: var(--bucket-avoid); }
+    .bucket-reduce   { background: rgba(227,129,42,.14); color: var(--bucket-reduce); }
+    .bucket-exit     { background: rgba(188,140,255,.14); color: var(--bucket-exit); }
+
+    /* ─── SCORE BARS ──────────────────────────────────────────────────── */
+    .score-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 90px;
+    }
+    .score-bar .num { width: 30px; text-align: right; font-size: 11px; font-variant-numeric: tabular-nums; }
+    .score-bar .track {
+      flex: 1;
+      height: 5px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .score-bar .fill { height: 100%; border-radius: 3px; transition: width .3s; }
+    .fill-opp   { background: var(--green); }
+    .fill-risk  { background: var(--red); }
+    .fill-cred  { background: var(--accent); }
+    .fill-crowd { background: var(--yellow); }
+    .fill-lag   { background: var(--teal); }
+    .fill-narr  { background: var(--purple); }
+    .fill-exp   { background: var(--orange); }
+
+    /* ─── MINI SPARKBARS (quant scorecard) ────────────────────────────── */
+    .spark-grid {
+      display: flex;
+      gap: 3px;
+      flex-wrap: nowrap;
+    }
+    .spark-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 28px;
+    }
+    .spark-item .s-label { font-size: 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .3px; }
+    .spark-item .s-bar {
+      width: 20px;
+      height: 28px;
+      background: var(--border2);
+      border-radius: 2px;
+      position: relative;
+      overflow: hidden;
+      margin: 2px 0;
+    }
+    .spark-item .s-fill {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      border-radius: 2px;
+    }
+    .spark-item .s-val { font-size: 9px; color: var(--text); font-variant-numeric: tabular-nums; }
+
+    /* ─── PANELS (slide in from right) ───────────────────────────────── */
+    .slide-panel {
+      position: fixed;
+      right: -640px;
+      top: 48px; /* below topbar */
+      bottom: 0;
+      width: 620px;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      overflow-y: auto;
+      transition: right .22s ease;
+      z-index: 200;
+    }
+    .slide-panel.open { right: 0; }
+    .panel-inner { padding: 22px 24px; }
+    .panel-close {
+      position: sticky;
+      top: 0;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 5;
+    }
+    .panel-close h3 { font-size: 13px; color: var(--muted); }
+
+    /* ─── EVENT DETAIL ────────────────────────────────────────────────── */
+    .detail-section { margin-bottom: 22px; }
+    .detail-section h4 {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: var(--muted);
+      margin-bottom: 10px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--border2);
+    }
+    .confirmed-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+    .confirmed-box {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+    }
+    .confirmed-box .cb-label {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .confirmed-box .cb-label.green { color: var(--green); }
+    .confirmed-box .cb-label.yellow { color: var(--yellow); }
+    .confirmed-box .cb-label.muted  { color: var(--muted); }
+    .confirmed-box p { font-size: 11px; color: var(--text); line-height: 1.5; }
+
+    .article-card {
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 8px;
+      font-size: 11px;
+    }
+    .article-card .ac-src { font-size: 10px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+    .article-card .ac-headline { font-weight: 600; margin-bottom: 4px; line-height: 1.4; }
+    .article-card .ac-meta { color: var(--muted); font-size: 10px; }
+
+    .impact-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      margin: 2px;
+      cursor: pointer;
+    }
+    .impact-pos { background: rgba(63,185,80,.14); color: var(--green); }
+    .impact-neg { background: rgba(248,81,73,.14); color: var(--red); }
+    .impact-neu { background: rgba(56,139,253,.14); color: var(--accent); }
+
+    /* ─── STOCK DETAIL PANEL ─────────────────────────────────────────── */
+    .thesis-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+    .thesis-box {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+    }
+    .thesis-box .tb-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+    .thesis-box.bull .tb-label { color: var(--green); }
+    .thesis-box.bear .tb-label { color: var(--red); }
+    .thesis-box.neut .tb-label { color: var(--muted); }
+    .thesis-box p { font-size: 11px; color: var(--text); line-height: 1.5; }
+
+    .scorecard-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .score-tile {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 9px 10px;
+    }
+    .score-tile .st-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+    .score-tile .st-val { font-size: 18px; font-weight: 700; margin: 3px 0; }
+    .score-tile .st-bar .track { width: 100%; height: 4px; background: var(--border); border-radius: 2px; margin-top: 3px; }
+    .score-tile .st-bar .fill { height: 100%; border-radius: 2px; }
+
+    .fund-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .fund-tile {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 9px 10px;
+    }
+    .fund-tile .ft-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+    .fund-tile .ft-val { font-size: 15px; font-weight: 700; margin-top: 3px; }
+
+    /* ─── DAILY BRIEF ─────────────────────────────────────────────────── */
+    #brief-text {
+      font-family: "SF Mono", "Courier New", monospace;
+      font-size: 12px;
+      line-height: 1.8;
+      color: var(--text);
+      white-space: pre-wrap;
+      background: #080c10;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      max-height: 65vh;
+      overflow-y: auto;
+    }
+
+    /* ─── NARRATIVES ──────────────────────────────────────────────────── */
+    .narrative-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+    }
+    .narrative-card .nc-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+    .narrative-card h4 { font-size: 13px; font-weight: 600; }
+    .narrative-card .nc-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+    .narrative-card .nc-desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .narrative-card .nc-stocks { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
+    .stock-chip {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(56,139,253,.14);
+      color: var(--accent);
+      cursor: pointer;
+    }
+    .stock-chip:hover { background: rgba(56,139,253,.25); }
+
+    /* ─── FEEDBACK ────────────────────────────────────────────────────── */
+    .feedback-form { display: flex; flex-direction: column; gap: 10px; }
+    .feedback-form label { font-size: 10px; color: var(--muted); text-transform: uppercase; }
+    .feedback-form input,
+    .feedback-form textarea,
+    .feedback-form select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 5px;
+      padding: 7px 9px;
+      font-size: 12px;
+      font-family: inherit;
+      width: 100%;
+    }
+    .feedback-form textarea { min-height: 80px; resize: vertical; }
+
+    /* ─── BUTTONS ─────────────────────────────────────────────────────── */
+    button, .btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      padding: 5px 11px;
+      font-size: 11px;
+      cursor: pointer;
+      font-weight: 600;
+      font-family: inherit;
+      transition: opacity .12s;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    button:hover, .btn:hover { opacity: .85; }
+    button.secondary, .btn.secondary {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    button.danger { background: rgba(248,81,73,.15); color: var(--red); border: 1px solid rgba(248,81,73,.3); }
+
+    /* ─── MISC ────────────────────────────────────────────────────────── */
+    .loading { text-align: center; padding: 36px; color: var(--muted); font-size: 12px; }
+    .empty   { text-align: center; padding: 36px; color: var(--muted2); font-size: 12px; }
+    .spinner {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid var(--border); border-top-color: var(--accent);
+      border-radius: 50%; animation: spin .7s linear infinite;
+      margin-right: 5px; vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .toast {
+      position: fixed; bottom: 20px; right: 20px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      z-index: 999;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: all .22s;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.success { border-color: var(--green); }
+    .toast.error   { border-color: var(--red); }
+
+    /* dashboard grid */
+    .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 900px) { .dash-grid { grid-template-columns: 1fr; } }
+
+    /* divider */
+    .divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+    /* link-like style */
+    .text-link { color: var(--accent); cursor: pointer; font-size: 11px; }
+    .text-link:hover { text-decoration: underline; }
+
+    /* price colors */
+    .pos { color: var(--green); }
+    .neg { color: var(--red); }
+
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  </style>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- TOP BAR -->
+<!-- ============================================================ -->
+<div id="topbar">
+  <div class="logo">⬡ GeoInt <small>Terminal</small></div>
+  <div id="market-status"><div class="dot"></div><span id="last-refresh">Live</span></div>
+
+  <input type="text" id="global-search" placeholder="Search events, tickers, themes…" oninput="globalSearch(this.value)" />
+
+  <div class="topbar-filters">
+    <select id="tf-sector" onchange="applyTopFilters()" title="Sector">
+      <option value="">All Sectors</option>
+      <option value="Energy">Energy</option>
+      <option value="Defense">Defense</option>
+      <option value="Technology">Technology</option>
+      <option value="Financials">Financials</option>
+      <option value="Materials">Materials</option>
+      <option value="Agriculture">Agriculture</option>
+    </select>
+    <select id="tf-type" onchange="applyTopFilters()" title="Event Type">
+      <option value="">All Types</option>
+      <option value="geopolitical">Geopolitical</option>
+      <option value="macro">Macro</option>
+      <option value="company">Company</option>
+      <option value="sector">Sector</option>
+    </select>
+    <select id="tf-cred" onchange="applyTopFilters()" title="Min Credibility">
+      <option value="0">All Credibility</option>
+      <option value="0.4">≥ 40%</option>
+      <option value="0.6">≥ 60%</option>
+      <option value="0.8">≥ 80%</option>
+    </select>
+  </div>
+
+  <div id="topbar-right">
+    <button class="secondary" onclick="refreshAll()" style="font-size:11px">↻ Refresh</button>
+    <button onclick="triggerIngest()" style="font-size:11px">⬇ Ingest</button>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- BODY -->
+<!-- ============================================================ -->
+<div id="body">
+
+  <!-- SIDEBAR -->
+  <nav id="sidebar">
+    <nav>
+      <a href="#" class="active" data-page="dashboard"><span class="icon">◈</span> Dashboard</a>
+      <a href="#" data-page="signals"><span class="icon">⚡</span> Signals</a>
+      <a href="#" data-page="events"><span class="icon">◎</span> Events</a>
+      <a href="#" data-page="articles"><span class="icon">≡</span> Articles</a>
+      <a href="#" data-page="stocks"><span class="icon">◷</span> Stocks</a>
+      <a href="#" data-page="narratives"><span class="icon">⬡</span> Narratives</a>
+      <a href="#" data-page="brief"><span class="icon">◻</span> Daily Brief</a>
+      <a href="#" data-page="alerts" id="nav-alerts">
+        <span class="icon">◈</span> Alerts
+        <span class="badge" id="alert-badge" style="display:none">0</span>
+      </a>
+      <a href="#" data-page="feedback"><span class="icon">◇</span> Feedback</a>
+    </nav>
+
+    <div id="sidebar-live">
+      <div class="section-label">Live Alerts</div>
+      <div id="live-alert-feed"><div style="padding:10px 14px; font-size:11px; color:var(--muted2)">Loading…</div></div>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <div id="main">
+    <div id="page-header">
+      <h2 id="page-title">Dashboard</h2>
+      <div class="hactions" id="page-actions"></div>
+    </div>
+    <div id="content">
+
+      <!-- ======================================================= -->
+      <!-- DASHBOARD -->
+      <!-- ======================================================= -->
+      <div class="page active" id="page-dashboard">
+        <div class="stats-grid" id="stats-grid">
+          <div class="stat-card">
+            <div class="label">Events (24h)</div>
+            <div class="value" id="stat-events">—</div>
+            <div class="sub">Clustered</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Critical Alerts</div>
+            <div class="value" style="color:var(--red)" id="stat-critical">—</div>
+            <div class="sub">Active</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">High Alerts</div>
+            <div class="value" style="color:var(--yellow)" id="stat-high">—</div>
+            <div class="sub">Active</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Top Opportunity</div>
+            <div class="value" style="color:var(--green)" id="stat-opp">—</div>
+            <div class="sub" id="stat-opp-ticker">Loading…</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Early Signals</div>
+            <div class="value" style="color:var(--teal)" id="stat-early">—</div>
+            <div class="sub">Emerging events</div>
+          </div>
+        </div>
+
+        <div class="dash-grid">
+          <div class="card">
+            <div class="card-header">
+              <h3>Top Events</h3>
+              <span style="font-size:10px;color:var(--muted)">by credibility</span>
+            </div>
+            <div class="card-body" style="padding:0">
+              <table>
+                <thead><tr><th>Event</th><th>Type</th><th>Stage</th><th>Cred</th></tr></thead>
+                <tbody id="dash-events-body">
+                  <tr><td colspan="4" class="loading"><span class="spinner"></span>Loading…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3>Top Opportunities</h3>
+              <span style="font-size:10px;color:var(--muted)">by opportunity score</span>
+            </div>
+            <div class="card-body" style="padding:0">
+              <table>
+                <thead><tr><th>Ticker</th><th>Bucket</th><th>Opp</th><th>Risk</th></tr></thead>
+                <tbody id="dash-stocks-body">
+                  <tr><td colspan="4" class="loading"><span class="spinner"></span>Loading…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>Recent Alerts</h3>
+            <button class="secondary" style="font-size:10px;padding:3px 8px" onclick="runAlertSweep()">Run Sweep</button>
+          </div>
+          <div class="card-body" style="padding:0">
+            <table>
+              <thead><tr><th>Tier</th><th>Event</th><th>Time</th><th></th></tr></thead>
+              <tbody id="dash-alerts-body">
+                <tr><td colspan="4" class="loading"><span class="spinner"></span>Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ML / system health status bar -->
+        <div id="dash-ml-status" style="padding:0 2px 4px"></div>
+
+        <!-- Emerging Picks — news-driven recommendations beyond the 30 tracked tickers -->
+        <div class="card" style="margin-top:14px">
+          <div class="card-header">
+            <h3>⚡ Emerging Picks <span style="font-size:10px;font-weight:400;color:var(--muted)">from live news</span></h3>
+            <div style="display:flex;gap:6px;align-items:center">
+              <select id="ep-hours" onchange="loadEmergingPicks()" style="background:var(--bg);border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:3px 6px;font-size:10px;font-family:inherit">
+                <option value="6">Last 6h</option>
+                <option value="24" selected>Last 24h</option>
+                <option value="48">Last 48h</option>
+                <option value="72">Last 72h</option>
+              </select>
+              <button onclick="loadEmergingPicks(true)" style="font-size:10px;padding:2px 8px;background:var(--border);border:none;border-radius:4px;color:var(--text);cursor:pointer">↻</button>
+              <span id="ep-last-updated" style="font-size:9px;color:var(--muted2)">—</span>
+            </div>
+          </div>
+          <div class="card-body" style="padding:0">
+            <div id="emerging-picks-body">
+              <div class="loading" style="padding:16px"><span class="spinner"></span>Scanning news for emerging stocks…</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ======================================================= -->
+      <!-- SIGNALS -->
+      <!-- ======================================================= -->
+      <div class="page" id="page-signals">
+        <div class="filter-bar" style="gap:10px;align-items:center">
+          <span style="font-size:12px;color:var(--muted)">Min confidence:</span>
+          <select id="sig-confidence" onchange="loadSignals()" style="font-size:12px;padding:4px 8px;background:var(--card-bg);border:1px solid var(--border);color:var(--text);border-radius:4px">
+            <option value="0">All signals</option>
+            <option value="0.52" selected>Moderate+ (52%+)</option>
+            <option value="0.65">High conviction (65%+)</option>
+          </select>
+          <button onclick="loadSignals()" style="margin-left:auto;padding:5px 14px;background:var(--accent);color:#fff;border:none;border-radius:4px;font-size:12px;cursor:pointer">Refresh</button>
+        </div>
+        <div id="signals-body" style="padding:16px"></div>
+      </div>
+
+      <!-- ======================================================= -->
+      <!-- EVENTS -->
+      <!-- ======================================================= -->
+      <div class="page" id="page-events">
+        <div class="filter-bar">
+          <select id="ev-stage" onchange="loadEvents()">
+            <option value="">All Stages</option>
+            <option value="emerging">Emerging</option>
+            <option value="developing">Developing</option>
+            <option value="peak">Peak</option>
+            <option value="declining">Declining</option>
+          </select>
+          <select id="ev-type" onchange="loadEvents()">
+            <option value="">All Types</option>
+            <option value="geopolitical">Geopolitical</option>
+            <option value="macro">Macro</option>
+            <option value="company">Company</option>
+            <option value="sector">Sector</option>
+          </select>
+          <select id="ev-cred" onchange="loadEvents()">
+            <option value="0">All Credibility</option>
+            <option value="0.3">≥ 30%</option>
+            <option value="0.5">≥ 50%</option>
+            <option value="0.7">≥ 70%</option>
+            <option value="0.85">≥ 85%</option>
+          </select>
+          <select id="ev-hours" onchange="loadEvents()">
+            <option value="">All Time</option>
+            <option value="1">Last 1h</option>
+            <option value="6">Last 6h</option>
+            <option value="24">Last 24h</option>
+            <option value="72">Last 3d</option>
+            <option value="168">Last 7d</option>
+          </select>
+          <select id="ev-geo" onchange="loadEvents()">
+            <option value="">All Geographies</option>
+            <option value="Russia">Russia</option>
+            <option value="China">China</option>
+            <option value="Middle East">Middle East</option>
+            <option value="Taiwan">Taiwan</option>
+            <option value="Europe">Europe</option>
+            <option value="US">US</option>
+            <option value="North Korea">North Korea</option>
+          </select>
+          <input type="text" id="ev-source" placeholder="Source filter…" oninput="debounce(loadEvents, 400)()" />
+          <input type="text" id="ev-ticker" placeholder="Ticker filter…" oninput="debounce(loadEvents, 400)()" style="text-transform:uppercase;width:100px" />
+          <input type="text" id="ev-search" placeholder="Search events…" oninput="debounce(loadEvents, 400)()" />
+        </div>
+        <div class="card">
+          <div class="card-body" style="padding:0">
+            <table>
+              <thead>
+                <tr>
+                  <th>Title</th><th>Type</th><th>Stage</th>
+                  <th>Cred</th><th>Sources</th><th>Geography</th><th>Time</th>
+                </tr>
+              </thead>
+              <tbody id="events-body">
+                <tr><td colspan="7" class="loading"><span class="spinner"></span>Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======================================================= -->
+      <!-- ARTICLES (precision filtering) -->
+      <!-- ======================================================= -->
+      <div class="page" id="page-articles">
+        <div class="filter-bar">
+          <select id="art-source" onchange="loadArticles()">
+            <option value="">All Sources</option>
+          </select>
+          <select id="art-has-event" onchange="loadArticles()">
+            <option value="">All (clustered + raw)</option>
+            <option value="true">Clustered into event</option>
+            <option value="false">Unclustered only</option>
+          </select>
+          <select id="art-primary" onchange="loadArticles()">
+            <option value="">All Sources</option>
+            <option value="true">Primary Sources Only</option>
+          </select>
+          <select id="art-hours" onchange="loadArticles()">
+            <option value="">All Time</option>
+            <option value="1">Last 1h</option>
+            <option value="6">Last 6h</option>
+            <option value="24">Last 24h</option>
+            <option value="72">Last 3d</option>
+            <option value="168">Last 7d</option>
+          </select>
+          <input type="text" id="art-ticker" placeholder="Ticker (e.g. NVDA)" oninput="debounce(loadArticles, 400)()" style="text-transform:uppercase;width:100px" />
+          <input type="text" id="art-search" placeholder="Search headlines…" oninput="debounce(loadArticles, 400)()" />
+        </div>
+        <div id="articles-count" style="font-size:11px;color:var(--muted);margin-bottom:8px"></div>
+        <div class="card">
+          <div class="card-body" style="padding:0">
+            <table>
+              <thead>
+                <tr>
+                  <th>Headline</th><th>Source</th><th>Primary</th>
+                  <th>Official</th><th>Event</th><th>Time</th>
+                </tr>
+              </thead>
+              <tbody id="articles-body">
+                <tr><td colspan="6" class="loading"><span class="spinner"></span>Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======================================================= -->
+      <!-- STOCKS (quant scorecard) -->
+      <!-- ======================================================= -->
+      <div class="page" id="page-stocks">
+        <div class="filter-bar">
+          <select id="st-sector" onchange="loadStocks()">
+            <option value="">All Sectors</option>
+            <option value="Energy">Energy</option>
+            <option value="Defense">Defense</option>
+            <option value="Technology">Technology</option>
+            <option value="Financials">Financials</option>
+            <option value="Materials">Materials</option>
+            <option value="Agriculture">Agriculture</option>
+          </select>
+          <select id="st-bucket" onchange="loadStocks()">
+            <option value="">All Buckets</option>
+            <option value="Early Opportunity">Early Opportunity</option>
+            <option value="Research Deeper">Research Deeper</option>
+            <option value="Watch">Watch</option>
+            <option value="Wait for Confirmation">Wait for Confirmation</option>
+            <option value="Avoid - Crowded">Avoid - Crowded</option>
+            <option value="Reduce Exposure">Reduce Exposure</option>
+            <option value="Exit Window Approaching">Exit Window Approaching</option>
+          </select>
+          <select id="st-min-opp" onchange="loadStocks()">
+            <option value="0">All Opportunity</option>
+            <option value="0.3">Opp ≥ 30%</option>
+            <option value="0.5">Opp ≥ 50%</option>
+            <option value="0.7">Opp ≥ 70%</option>
+          </select>
+        </div>
+        <div class="card">
+          <div class="card-body" style="padding:0">
+            <table>
+              <thead>
+                <tr>
+                  <th>Ticker</th>
+                  <th>Sector</th>
+                  <th>Decision Bucket</th>
+                  <th>Opp</th>
+                  <th>Exp</th>
+                  <th>Impact</th>
+                  <th>Narr</th>
+                  <th>Lag</th>
+                  <th>Crowd</th>
+                  <th>Risk</th>
+                  <th>Price</th>
+                  <th>1D</th>
+                  <th>RSI</th>
+                </tr>
+              </thead>
+              <tbody id="stocks-body">
+                <tr><td colspan="13" class="loading"><span class="spinner"></span>Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div style="margin-top:8px;font-size:10px;color:var(--muted2)">
+          Opp = Opportunity · Exp = Exposure · Narr = Narrative Stage · Lag = Price Reaction Lag · Crowd = Crowding
+        </div>
+      </div>
+
+      <!-- ======================================================= -->
+      <!-- NARRATIVES -->
+      <!-- ======================================================= -->
+      <div class="page" id="page-narratives">
+        <div id="narratives-container">
+          <div class="loading"><span class="spinner"></span>Loading…</div>
+        </div>
+      </div>
+
+      <!-- ======================================================= -->
+      <!-- DAILY BRIEF -->
+      <!-- ======================================================= -->
+      <div class="page" id="page-brief">
+        <div style="display:flex; gap:8px; margin-bottom:14px">
+          <button onclick="generateBrief()">⚡ Generate New Brief</button>
+        </div>
+        <pre id="brief-text" class="loading">Loading…</pre>
+      </div>
+
+      <!-- ======================================================= -->
+      <!-- ALERTS -->
+      <!-- ======================================================= -->
+      <div class="page" id="page-alerts">
+        <div class="filter-bar">
+          <select id="filter-tier" onchange="loadAlerts()">
+            <option value="">All Tiers</option>
+            <option value="Critical">Critical</option>
+            <option value="High">High</option>
+            <option value="Monitor">Monitor</option>
+          </select>
+          <button onclick="runAlertSweep()">⚡ Run Alert Sweep</button>
+        </div>
+        <div id="alerts-list"></div>
+      </div>
+
+      <!-- ======================================================= -->
+      <!-- FEEDBACK -->
+      <!-- ======================================================= -->
+      <div class="page" id="page-feedback">
+        <div class="card" style="max-width:480px">
+          <div class="card-header"><h3>Submit Feedback</h3></div>
+          <div class="card-body">
+            <div class="feedback-form">
+              <div><label>Event ID (optional)</label>
+                <input type="number" id="fb-event-id" placeholder="Leave blank for general feedback" /></div>
+              <div><label>Ticker (optional)</label>
+                <input type="text" id="fb-ticker" placeholder="e.g. NVDA" style="text-transform:uppercase" /></div>
+              <div><label>Rating (1–5)</label>
+                <select id="fb-rating">
+                  <option value="5">5 — Excellent signal</option>
+                  <option value="4">4 — Good</option>
+                  <option value="3" selected>3 — Average</option>
+                  <option value="2">2 — Weak</option>
+                  <option value="1">1 — Noise / False positive</option>
+                </select></div>
+              <div><label>Comment</label>
+                <textarea id="fb-comment" placeholder="What was useful or misleading?"></textarea></div>
+              <button onclick="submitFeedback()">Submit Feedback</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- #content -->
+  </div><!-- #main -->
+</div><!-- #body -->
+
+<!-- ============================================================ -->
+<!-- EVENT DETAIL PANEL -->
+<!-- ============================================================ -->
+<div class="slide-panel" id="event-panel">
+  <div class="panel-close">
+    <h3>Event Detail</h3>
+    <button class="secondary" onclick="closePanel('event-panel')" style="padding:3px 8px">✕</button>
+  </div>
+  <div class="panel-inner" id="event-panel-inner">
+    <div class="loading"><span class="spinner"></span>Loading…</div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- STOCK DETAIL PANEL -->
+<!-- ============================================================ -->
+<div class="slide-panel" id="stock-panel">
+  <div class="panel-close">
+    <h3 id="stock-panel-title">Stock Detail</h3>
+    <button class="secondary" onclick="closePanel('stock-panel')" style="padding:3px 8px">✕</button>
+  </div>
+  <div class="panel-inner" id="stock-panel-inner">
+    <div class="loading"><span class="spinner"></span>Loading…</div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- ============================================================ -->
+<!-- JAVASCRIPT -->
+<!-- ============================================================ -->
+<script>
+const API = "";
+
+// ─── Event type display helpers ───────────────────────────────────────────
+// Maps the 15-class causal event system to human-readable labels and badge
+// CSS class names. The legacy 4-bucket names (geopolitical/macro/company/sector)
+// pass through unchanged since they have existing CSS.
+const EVENT_TYPE_LABELS = {
+  // Legacy 4-bucket (backward compat)
+  geopolitical: "Geopolitical",
+  macro:        "Macro",
+  company:      "Company",
+  sector:       "Sector",
+  // New 15-class causal system
+  geopolitical_taiwan_risk:        "Taiwan Risk",
+  export_restriction_chips:        "Chip Export Ban",
+  export_restriction_equipment:    "Equip Export Ban",
+  geopolitical_energy_risk:        "Energy Geopolitics",
+  geopolitical_sanctions:          "Sanctions",
+  supply_disruption_foundry:       "Foundry Disruption",
+  trade_policy_tariff:             "Tariff Policy",
+  ai_demand_expansion:             "AI Demand ▲",
+  ai_demand_contraction:           "AI Demand ▼",
+  supply_disruption_memory:        "Memory Disruption",
+  domestic_manufacturing_subsidy:  "Mfg Subsidy",
+  macro_monetary_hawkish:          "Hawkish Fed",
+  macro_monetary_dovish:           "Dovish Fed",
+  company_earnings_guidance:       "Earnings / Guidance",
+  regulatory_antitrust:            "Antitrust",
+  merger_acquisition_tech:         "M&A",
+  unknown:                         "Unknown",
+};
+
+// Maps causal event classes → legacy CSS class (for badge colour).
+// This lets us reuse the existing type-geopolitical / type-macro / etc. CSS.
+const EVENT_TYPE_CSS_CLASS = {
+  geopolitical_taiwan_risk:        "geopolitical",
+  export_restriction_chips:        "geopolitical",
+  export_restriction_equipment:    "geopolitical",
+  geopolitical_energy_risk:        "geopolitical",
+  geopolitical_sanctions:          "geopolitical",
+  supply_disruption_foundry:       "sector",
+  trade_policy_tariff:             "macro",
+  ai_demand_expansion:             "company",
+  ai_demand_contraction:           "company",
+  supply_disruption_memory:        "sector",
+  domestic_manufacturing_subsidy:  "macro",
+  macro_monetary_hawkish:          "macro",
+  macro_monetary_dovish:           "macro",
+  company_earnings_guidance:       "company",
+  regulatory_antitrust:            "company",
+  merger_acquisition_tech:         "company",
+};
+
+/** Return human-readable event type label. */
+function fmtEventType(type) {
+  if (!type) return "Sector";
+  return EVENT_TYPE_LABELS[type] || type.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
+/** Return CSS class suffix for a badge (always one of the 4 legacy colours). */
+function eventTypeCss(type) {
+  return EVENT_TYPE_CSS_CLASS[type] || type || "sector";
+}
+
+/** "Why it matters" blurb for any event type, including the new 15-class system. */
+function whyItMattersText(eventType) {
+  const map = {
+    geopolitical_taiwan_risk:
+      "Taiwan conflict risk directly threatens global semiconductor foundry capacity. TSMC produces ~90% of advanced nodes. Any disruption would cause immediate supply shocks across AI, data-center, and consumer electronics..",
+    export_restriction_chips:
+      "US export controls remove direct revenue from affected companies and trigger supply reconfigurations. Historically NVDA, AMD, and INTC see 5–15% earnings impact within 2 quarters.",
+    export_restriction_equipment:
+      "Equipment restrictions limit next-generation node construction in China, reducing future foundry competition but also constraining equipment company revenues.",
+    geopolitical_energy_risk:
+      "Energy price shocks raise input costs across manufacturing and logistics, compressing margins for semiconductor fabs and increasing consumer electronics prices.",
+    geopolitical_sanctions:
+      "Sanctions cut bilateral trade flows and can isolate companies with significant revenue exposure in sanctioned geographies.",
+    supply_disruption_foundry:
+      "Foundry capacity disruptions constrain chip output 6–18 months forward, typically causing price spikes and allocation tightening across the semiconductor supply chain.",
+    trade_policy_tariff:
+      "New tariffs directly affect cost structures for hardware imports/exports and can trigger retaliatory measures affecting entire supply chains.",
+    ai_demand_expansion:
+      "AI infrastructure build-out is a structural demand tailwind for GPU clusters, HBM memory, advanced packaging, and high-speed networking. Affects NVDA, AMD, AVGO, MU, and data-center adjacent names.",
+    ai_demand_contraction:
+      "A slowdown in AI infrastructure spending or hyperscaler capex reduction compresses revenue across the GPU, memory, and networking stack.",
+    supply_disruption_memory:
+      "Memory supply disruptions affect DRAM and NAND pricing broadly, benefiting suppliers with surplus inventory and hurting OEM manufacturers.",
+    domestic_manufacturing_subsidy:
+      "Government subsidies (CHIPS Act, EU Chips Act, etc.) reshape long-term capex allocation and can create multi-year revenue tailwinds for qualifying domestic fabs.",
+    macro_monetary_hawkish:
+      "Hawkish Fed policy raises the discount rate, compressing multiples for high-PE tech names and increasing financing costs for capex-heavy fabs.",
+    macro_monetary_dovish:
+      "Dovish monetary policy expands risk appetite and multiple expansion for growth-oriented semiconductor and AI names.",
+    company_earnings_guidance:
+      "Forward guidance is the most direct fundamental signal: guidance cuts compress consensus estimates immediately; guidance raises trigger multiple expansion.",
+    regulatory_antitrust:
+      "Antitrust action can block or delay mergers, restrict market behaviour, and create headline risk that reprices acquirer and target stocks.",
+    merger_acquisition_tech:
+      "M&A in semiconductors reshapes competitive dynamics, IP ownership, and long-term market structure. Synergies often take 2–4 years to materialise.",
+    // Legacy fallbacks
+    geopolitical: "Geopolitical event with potential supply chain, sentiment, and safe-haven asset implications.",
+    macro: "Macro event affecting interest rate expectations, credit conditions, and broad market risk appetite.",
+    company: "Company-specific event with direct fundamental impact on earnings, guidance, or corporate structure.",
+    sector: "Sector-level event with cross-company regulatory, policy, or competitive implications.",
+  };
+  return map[eventType] || map[eventType?.split("_")[0]] || "Market-relevant event with direct or indirect impact on tracked securities.";
+}
+
+// ─── Debounce ────────────────────────────────────────────────────────────
+function debounce(fn, delay) {
+  let timer;
+  return function(...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), delay);
+  };
+}
+
+// ─── Navigation ──────────────────────────────────────────────────────────
+document.querySelectorAll("#sidebar nav a").forEach(link => {
+  link.addEventListener("click", e => {
+    e.preventDefault();
+    navigate(link.dataset.page);
+  });
+});
+
+const pageTitles = {
+  dashboard: "Dashboard",
+  signals:   "Signals — News → Stock",
+  events:    "Events",
+  articles:  "Articles",
+  stocks:    "Stocks",
+  narratives:"Narratives",
+  brief:     "Daily Brief",
+  alerts:    "Alerts",
+  feedback:  "Feedback",
+};
+const pageLoaders = {
+  dashboard:  loadDashboard,
+  signals:    loadSignals,
+  events:     loadEvents,
+  articles:   () => { loadSources(); loadArticles(); },
+  stocks:     loadStocks,
+  narratives: loadNarratives,
+  brief:      loadBrief,
+  alerts:     loadAlerts,
+};
+
+function navigate(page) {
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll("#sidebar nav a").forEach(a => a.classList.remove("active"));
+  const pageEl = document.getElementById("page-" + page);
+  const navEl  = document.querySelector(`[data-page="${page}"]`);
+  if (pageEl) pageEl.classList.add("active");
+  if (navEl)  navEl.classList.add("active");
+  document.getElementById("page-title").textContent = pageTitles[page] || page;
+  document.getElementById("page-actions").innerHTML = pageActionHTML[page] || "";
+  pageLoaders[page]?.();
+}
+
+const pageActionHTML = {
+  events:   `<button class="secondary" onclick="loadEvents()" style="font-size:10px;padding:3px 8px">↻</button>`,
+  articles: `<button class="secondary" onclick="loadArticles()" style="font-size:10px;padding:3px 8px">↻</button>`,
+  stocks:   `<button class="secondary" onclick="loadStocks()" style="font-size:10px;padding:3px 8px">↻</button>`,
+};
+
+// ─── API helper ───────────────────────────────────────────────────────────
+async function api(path, options = {}) {
+  const res = await fetch(API + path, options);
+  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  return res.json();
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────────
+function showToast(msg, type = "success") {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = `toast ${type} show`;
+  setTimeout(() => t.classList.remove("show"), 3200);
+}
+
+// ─── Panel helpers ────────────────────────────────────────────────────────
+function openPanel(id) {
+  document.getElementById(id).classList.add("open");
+}
+function closePanel(id) {
+  document.getElementById(id).classList.remove("open");
+}
+
+// ─── Formatting helpers ───────────────────────────────────────────────────
+function truncate(s, n) {
+  if (!s) return "—";
+  return s.length > n ? s.slice(0, n) + "…" : s;
+}
+function pct(v, dp = 1) {
+  if (v == null) return "—";
+  return (v >= 0 ? "+" : "") + v.toFixed(dp) + "%";
+}
+function relTime(ts) {
+  if (!ts) return "—";
+  const d = new Date(ts + (ts.endsWith("Z") ? "" : "Z"));
+  const diff = (Date.now() - d) / 1000;
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.round(diff / 3600)}h ago`;
+  return `${Math.round(diff / 86400)}d ago`;
+}
+function mktcap(v) {
+  if (v == null) return "—";
+  if (v >= 1e12) return `$${(v/1e12).toFixed(2)}T`;
+  if (v >= 1e9)  return `$${(v/1e9).toFixed(1)}B`;
+  return `$${(v/1e6).toFixed(0)}M`;
+}
+function scoreBar(val, cls, width = 80) {
+  const p = Math.round((val || 0) * 100);
+  return `<div class="score-bar" style="min-width:${width}px">
+    <span class="num" style="font-size:10px">${p}%</span>
+    <div class="track"><div class="fill ${cls}" style="width:${p}%"></div></div>
+  </div>`;
+}
+function sparkBar(val, color, label) {
+  const h = Math.round((val || 0) * 100);
+  return `<div class="spark-item">
+    <div class="s-label">${label}</div>
+    <div class="s-bar"><div class="s-fill" style="height:${h}%;background:${color}"></div></div>
+    <div class="s-val">${h}%</div>
+  </div>`;
+}
+function bucketBadge(b) {
+  if (!b) return `<span class="badge bucket-watch">Watch</span>`;
+  const cls = {
+    "Early Opportunity":      "bucket-early",
+    "Research Deeper":        "bucket-research",
+    "Watch":                  "bucket-watch",
+    "Wait for Confirmation":  "bucket-wait",
+    "Avoid - Crowded":        "bucket-avoid",
+    "Reduce Exposure":        "bucket-reduce",
+    "Exit Window Approaching":"bucket-exit",
+  }[b] || "bucket-watch";
+  return `<span class="badge ${cls}" style="font-size:9px">${b}</span>`;
+}
+function rsiChip(rsi) {
+  if (rsi == null) return "—";
+  const color = rsi >= 70 ? "var(--red)" : rsi <= 30 ? "var(--green)" : "var(--muted)";
+  const tag   = rsi >= 70 ? " OB" : rsi <= 30 ? " OS" : "";
+  return `<span style="color:${color};font-variant-numeric:tabular-nums">${rsi.toFixed(1)}${tag}</span>`;
+}
+
+// ─── Global Search ────────────────────────────────────────────────────────
+let _searchTimer;
+function globalSearch(q) {
+  clearTimeout(_searchTimer);
+  if (!q || q.length < 2) return;
+  _searchTimer = setTimeout(() => {
+    document.getElementById("ev-search").value = q;
+    navigate("events");
+  }, 500);
+}
+
+function applyTopFilters() {
+  // Push top-bar filter values to the events page and reload
+  const type = document.getElementById("tf-type").value;
+  const cred = document.getElementById("tf-cred").value;
+  if (type) document.getElementById("ev-type").value = type;
+  if (cred) document.getElementById("ev-cred").value = cred;
+  navigate("events");
+}
+
+// ─── Live Sidebar Alert Feed ──────────────────────────────────────────────
+async function loadSidebarAlerts() {
+  const feed = document.getElementById("live-alert-feed");
+  try {
+    const alerts = await api("/alerts/?active_only=true&limit=6");
+    const badge = document.getElementById("alert-badge");
+    badge.textContent = alerts.length;
+    badge.style.display = alerts.length ? "inline" : "none";
+
+    if (!alerts.length) {
+      feed.innerHTML = `<div style="padding:10px 14px;font-size:11px;color:var(--muted2)">No active alerts</div>`;
+      return;
+    }
+    feed.innerHTML = alerts.map(a => `
+      <div class="live-alert-card ${a.tier}" onclick="openEventDetail(${a.event_id})">
+        <div class="lat" style="color:var(--tier-${a.tier.toLowerCase()})">${a.tier}</div>
+        <div class="ltt">${truncate(a.event_title || a.message, 55)}</div>
+        <div class="lts">${relTime(a.timestamp)}</div>
+      </div>`).join("");
+  } catch (e) {
+    feed.innerHTML = `<div style="padding:10px 14px;font-size:10px;color:var(--muted2)">Could not load</div>`;
+  }
+}
+
+// ─── Dashboard ────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  try {
+    const [events, scores, alerts, sysStatus] = await Promise.all([
+      api("/events/?limit=8"),
+      api("/stocks/?limit=6"),
+      api("/alerts/?active_only=true&limit=5"),
+      api("/admin/status").catch(() => null),   // non-fatal
+    ]);
+
+    const crit  = alerts.filter(a => a.tier === "Critical").length;
+    const high  = alerts.filter(a => a.tier === "High").length;
+    const emerging = events.filter(e => e.narrative_stage === "emerging").length;
+
+    document.getElementById("stat-events").textContent   = events.length;
+    document.getElementById("stat-critical").textContent = crit;
+    document.getElementById("stat-high").textContent     = high;
+    document.getElementById("stat-early").textContent    = emerging;
+    if (scores.length) {
+      const top = scores[0];
+      document.getElementById("stat-opp").textContent        = Math.round((top.opportunity_score||0) * 100) + "%";
+      document.getElementById("stat-opp-ticker").textContent = `${top.ticker} — ${top.company_name || ""}`;
+    }
+
+    // Events table
+    const et = document.getElementById("dash-events-body");
+    et.innerHTML = events.length ? events.map(ev => `
+      <tr class="clickable" onclick="openEventDetail(${ev.event_id})">
+        <td>${truncate(ev.title, 48)}</td>
+        <td><span class="badge type-${eventTypeCss(ev.event_type)}">${fmtEventType(ev.event_type)}</span></td>
+        <td><span class="badge stage-${ev.narrative_stage}">${ev.narrative_stage}</span></td>
+        <td>${scoreBar(ev.credibility_score, "fill-cred", 60)}</td>
+      </tr>`).join("") : `<tr><td colspan="4" class="empty">No events yet.</td></tr>`;
+
+    // Stocks table
+    const st = document.getElementById("dash-stocks-body");
+    st.innerHTML = scores.length ? scores.map(s => `
+      <tr class="clickable" onclick="openStockDetail('${s.ticker}')">
+        <td><strong>${s.ticker}</strong><br><span style="font-size:10px;color:var(--muted)">${s.company_name||""}</span></td>
+        <td>${bucketBadge(s.decision_bucket)}</td>
+        <td>${scoreBar(s.opportunity_score, "fill-opp", 55)}</td>
+        <td>${scoreBar(s.risk_score, "fill-risk", 55)}</td>
+      </tr>`).join("") : `<tr><td colspan="4" class="empty">No stock scores yet.</td></tr>`;
+
+    // Alerts table
+    const at = document.getElementById("dash-alerts-body");
+    at.innerHTML = alerts.length ? alerts.map(a => `
+      <tr class="clickable" onclick="openEventDetail(${a.event_id})">
+        <td><span class="badge tier-${a.tier}">${a.tier}</span></td>
+        <td style="max-width:220px">${truncate(a.event_title || a.message, 60)}</td>
+        <td style="color:var(--muted);white-space:nowrap">${relTime(a.timestamp)}</td>
+        <td><button class="danger" style="font-size:9px;padding:2px 6px" onclick="event.stopPropagation();dismissAlert(${a.id},this)">Dismiss</button></td>
+      </tr>`).join("") : `<tr><td colspan="4" class="empty">No active alerts.</td></tr>`;
+
+    // ML health status bar
+    const mlEl = document.getElementById("dash-ml-status");
+    if (mlEl && sysStatus) {
+      const ml = sysStatus.ml_model;
+      const ing = sysStatus.ingestion;
+      const data = sysStatus.data;
+      const cvAcc = ml.outcome_cv_accuracy;
+      const cvColor = cvAcc == null ? "var(--muted)"
+                    : cvAcc >= 0.80 ? "var(--yellow)"
+                    : cvAcc >= 0.45 ? "var(--green)"
+                    : "var(--red)";
+      const latestArticle = ing.latest_article_at
+        ? relTime(ing.latest_article_at) : "never";
+      mlEl.innerHTML = `
+        <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11px;padding:8px 12px;
+                    background:var(--surface2);border-radius:6px;border:1px solid var(--border2);margin-top:10px">
+          <span style="color:var(--muted)">ML Model</span>
+          <span>${ml.available
+            ? `<span style="color:var(--green)">●</span> Trained on <strong>${ml.n_training_samples}</strong> samples`
+            : `<span style="color:var(--red)">●</span> No model`}</span>
+          ${cvAcc != null ? `<span>CV accuracy: <strong style="color:${cvColor}">${(cvAcc*100).toFixed(1)}%</strong>
+            <span style="color:var(--muted);font-size:10px">(healthy: 45–80%)</span></span>` : ""}
+          ${ml.is_bootstrap ? `<span style="color:var(--yellow)">Bootstrap model</span>` : ""}
+          <span style="margin-left:auto;color:var(--muted)">Last article: ${latestArticle}</span>
+          <span style="color:var(--muted)">${data.labeled_outcomes} labeled / ${data.total_outcomes} total outcomes</span>
+          <span style="color:var(--muted)">Ingestion: every ${ing.scheduled_interval_minutes}m</span>
+          <button onclick="triggerAdminRefresh()" style="font-size:10px;padding:2px 8px;background:var(--border);border:none;border-radius:4px;color:var(--text);cursor:pointer">↻ Refresh Now</button>
+        </div>`;
+    }
+
+  } catch (err) {
+    showToast("Dashboard error: " + err.message, "error");
+  }
+}
+
+// ─── Events ───────────────────────────────────────────────────────────────
+async function loadEvents() {
+  const stage  = document.getElementById("ev-stage")?.value  || "";
+  const type   = document.getElementById("ev-type")?.value   || "";
+  const cred   = document.getElementById("ev-cred")?.value   || "0";
+  const hours  = document.getElementById("ev-hours")?.value  || "";
+  const geo    = document.getElementById("ev-geo")?.value    || "";
+  const source = document.getElementById("ev-source")?.value || "";
+  const ticker = document.getElementById("ev-ticker")?.value || "";
+  const search = document.getElementById("ev-search")?.value || "";
+
+  let url = `/events/?limit=100&min_credibility=${cred}`;
+  if (stage)  url += `&stage=${encodeURIComponent(stage)}`;
+  if (type)   url += `&event_type=${encodeURIComponent(type)}`;
+  if (hours)  url += `&hours=${hours}`;
+  if (geo)    url += `&geography=${encodeURIComponent(geo)}`;
+  if (source) url += `&source=${encodeURIComponent(source)}`;
+  if (ticker) url += `&ticker=${encodeURIComponent(ticker.toUpperCase())}`;
+
+  const tbody = document.getElementById("events-body");
+  tbody.innerHTML = `<tr><td colspan="7" class="loading"><span class="spinner"></span>Loading…</td></tr>`;
+
+  try {
+    let events = await api(url);
+    // Client-side search filter
+    if (search) {
+      const q = search.toLowerCase();
+      events = events.filter(e => e.title.toLowerCase().includes(q) || (e.summary||"").toLowerCase().includes(q));
+    }
+    tbody.innerHTML = events.length ? events.map(ev => `
+      <tr class="clickable" onclick="openEventDetail(${ev.event_id})">
+        <td style="max-width:280px">${truncate(ev.title, 70)}</td>
+        <td><span class="badge type-${eventTypeCss(ev.event_type)}">${fmtEventType(ev.event_type)}</span></td>
+        <td><span class="badge stage-${ev.narrative_stage}">${ev.narrative_stage}</span></td>
+        <td>${scoreBar(ev.credibility_score, "fill-cred", 60)}</td>
+        <td style="color:var(--muted);text-align:center">${ev.source_count||1}</td>
+        <td style="font-size:10px;color:var(--muted)">${truncate(ev.geography_tags, 20)}</td>
+        <td style="color:var(--muted);white-space:nowrap">${relTime(ev.timestamp)}</td>
+      </tr>`).join("")
+      : `<tr><td colspan="7" class="empty">No events match filters.</td></tr>`;
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty">Error: ${err.message}</td></tr>`;
+  }
+}
+
+// ─── Articles ─────────────────────────────────────────────────────────────
+async function loadSources() {
+  try {
+    const sources = await api("/events/sources");
+    const sel = document.getElementById("art-source");
+    const existing = Array.from(sel.options).map(o => o.value);
+    sources.forEach(s => {
+      if (!existing.includes(s)) {
+        const opt = document.createElement("option");
+        opt.value = s; opt.textContent = s;
+        sel.appendChild(opt);
+      }
+    });
+  } catch (e) {}
+}
+
+async function loadArticles() {
+  const source   = document.getElementById("art-source")?.value    || "";
+  const hasEvent = document.getElementById("art-has-event")?.value || "";
+  const primary  = document.getElementById("art-primary")?.value   || "";
+  const hours    = document.getElementById("art-hours")?.value     || "";
+  const ticker   = document.getElementById("art-ticker")?.value    || "";
+  const search   = document.getElementById("art-search")?.value    || "";
+
+  let url = `/events/articles?limit=100`;
+  if (source)   url += `&source=${encodeURIComponent(source)}`;
+  if (hasEvent) url += `&has_event=${hasEvent}`;
+  if (primary)  url += `&is_primary=${primary}`;
+  if (hours)    url += `&hours=${hours}`;
+  if (ticker)   url += `&ticker=${encodeURIComponent(ticker.toUpperCase())}`;
+  if (search)   url += `&search=${encodeURIComponent(search)}`;
+
+  const tbody = document.getElementById("articles-body");
+  tbody.innerHTML = `<tr><td colspan="6" class="loading"><span class="spinner"></span>Loading…</td></tr>`;
+
+  try {
+    const articles = await api(url);
+    document.getElementById("articles-count").textContent = `${articles.length} article(s) found`;
+    tbody.innerHTML = articles.length ? articles.map(a => `
+      <tr class="${a.event_id ? 'clickable' : ''}" onclick="${a.event_id ? `openEventDetail(${a.event_id})` : ''}">
+        <td style="max-width:300px">
+          <div style="font-weight:600;line-height:1.3">${truncate(a.headline, 80)}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">${truncate(a.content, 120)}</div>
+        </td>
+        <td><span style="font-size:11px;color:var(--accent)">${a.source}</span></td>
+        <td style="text-align:center">${a.is_primary_source ? `<span style="color:var(--green);font-size:11px">●</span>` : `<span style="color:var(--muted2);font-size:11px">○</span>`}</td>
+        <td style="text-align:center">${a.has_official_confirm ? `<span style="color:var(--yellow);font-size:11px">✓</span>` : "—"}</td>
+        <td style="text-align:center">
+          ${a.event_id
+            ? `<span class="text-link" onclick="event.stopPropagation();openEventDetail(${a.event_id})">#${a.event_id}</span>`
+            : `<span style="color:var(--muted2);font-size:10px">none</span>`}
+        </td>
+        <td style="color:var(--muted);white-space:nowrap">${relTime(a.timestamp)}</td>
+      </tr>`).join("")
+      : `<tr><td colspan="6" class="empty">No articles match filters.</td></tr>`;
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="6" class="empty">Error: ${err.message}</td></tr>`;
+  }
+}
+
+// ─── Stocks ───────────────────────────────────────────────────────────────
+let _fundCache = {};
+
+async function loadStocks() {
+  const sector = document.getElementById("st-sector")?.value   || "";
+  const bucket = document.getElementById("st-bucket")?.value   || "";
+  const minOpp = document.getElementById("st-min-opp")?.value  || "0";
+
+  let url = `/stocks/?limit=100&min_opportunity=${minOpp}`;
+  if (sector) url += `&sector=${encodeURIComponent(sector)}`;
+
+  const tbody = document.getElementById("stocks-body");
+  tbody.innerHTML = `<tr><td colspan="13" class="loading"><span class="spinner"></span>Loading…</td></tr>`;
+
+  try {
+    let scores = await api(url);
+    if (bucket) scores = scores.filter(s => s.decision_bucket === bucket);
+
+    if (!scores.length) {
+      tbody.innerHTML = `<tr><td colspan="13" class="empty">No stocks match filters. Ingest feeds first.</td></tr>`;
+      return;
+    }
+    // Render all rows immediately with scorecard data (no price yet)
+    tbody.innerHTML = scores.map(s => renderStockRow(s, null)).join("");
+
+    // Only prefetch live fundamentals for the top 8 by opportunity score.
+    // The rest load on-demand when the user clicks the row to open the detail panel.
+    // This avoids firing 30+ simultaneous yfinance calls every time the page opens.
+    const TOP_PREFETCH = 8;
+    scores.slice(0, TOP_PREFETCH).forEach(s => {
+      if (_fundCache[s.ticker]) {
+        // Already cached from a previous load — update row immediately
+        const row = document.getElementById(`row-${s.ticker}`);
+        if (row) row.outerHTML = renderStockRow(s, _fundCache[s.ticker]);
+        return;
+      }
+      api(`/stocks/${s.ticker}/fundamentals`)
+        .then(f => {
+          _fundCache[s.ticker] = f;
+          const row = document.getElementById(`row-${s.ticker}`);
+          if (row) row.outerHTML = renderStockRow(s, f);
+        })
+        .catch(() => {});
+    });
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="13" class="empty">Error: ${err.message}</td></tr>`;
+  }
+}
+
+function renderStockRow(s, f) {
+  const price = f?.current_price != null ? `$${f.current_price.toFixed(2)}` : "—";
+  const chg   = f?.price_change_1d_pct != null
+    ? `<span class="${f.price_change_1d_pct>=0?'pos':'neg'}">${pct(f.price_change_1d_pct)}</span>` : "—";
+  const rsi   = f?.rsi_14 != null ? rsiChip(f.rsi_14) : "—";
+
+  // Spark bar grid for multi-dimension score view
+  const scores = [
+    {v: s.opportunity_score, c: "var(--green)", l: "Opp"},
+    {v: s.exposure_score,    c: "var(--orange)", l: "Exp"},
+    {v: s.impact_score,      c: "var(--accent)", l: "Imp"},
+    {v: s.narrative_score,   c: "var(--purple)", l: "Narr"},
+    {v: s.lag_score,         c: "var(--teal)",   l: "Lag"},
+    {v: s.crowding_score,    c: "var(--yellow)",  l: "Crd"},
+    {v: s.risk_score,        c: "var(--red)",    l: "Risk"},
+  ];
+
+  function miniBar(val, color) {
+    const p = Math.round((val||0)*100);
+    return `<div style="display:flex;align-items:center;gap:4px;min-width:62px">
+      <div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+        <div style="height:100%;width:${p}%;background:${color};border-radius:2px"></div>
+      </div>
+      <span style="font-size:10px;color:var(--muted);width:24px;text-align:right">${p}%</span>
+    </div>`;
+  }
+
+  return `<tr id="row-${s.ticker}" class="clickable" onclick="openStockDetail('${s.ticker}')">
+    <td>
+      <strong style="font-size:13px">${s.ticker}</strong>
+      <div style="font-size:10px;color:var(--muted)">${truncate(s.company_name||"", 20)}</div>
+    </td>
+    <td><span style="font-size:10px;color:var(--muted)">${s.sector||"—"}</span></td>
+    <td>${bucketBadge(s.decision_bucket)}</td>
+    <td>${miniBar(s.opportunity_score, "var(--green)")}</td>
+    <td>${miniBar(s.exposure_score,    "var(--orange)")}</td>
+    <td>${miniBar(s.impact_score,      "var(--accent)")}</td>
+    <td>${miniBar(s.narrative_score,   "var(--purple)")}</td>
+    <td>${miniBar(s.lag_score,         "var(--teal)")}</td>
+    <td>${miniBar(s.crowding_score,    "var(--yellow)")}</td>
+    <td>${miniBar(s.risk_score,        "var(--red)")}</td>
+    <td style="font-family:monospace;font-size:12px">${price}</td>
+    <td style="font-size:12px">${chg}</td>
+    <td style="font-size:12px">${rsi}</td>
+  </tr>`;
+}
+
+// ─── Open Stock Detail ────────────────────────────────────────────────────
+async function openStockDetail(ticker) {
+  document.getElementById("stock-panel-title").textContent = ticker;
+  document.getElementById("stock-panel-inner").innerHTML =
+    `<div class="loading"><span class="spinner"></span>Loading ${ticker}…</div>`;
+  openPanel("stock-panel");
+
+  try {
+    const [scoreRes, fundRes, eventsRes, mlRes] = await Promise.all([
+      api(`/stocks/${ticker}`),
+      api(`/stocks/${ticker}/fundamentals`).catch(() => null),
+      api(`/stocks/${ticker}/events`).catch(() => []),
+      api(`/stocks/${ticker}/ml-prediction`).catch(() => null),
+    ]);
+
+    const s = scoreRes;
+    const f = fundRes;
+    const ml = mlRes;
+    const events = Array.isArray(eventsRes) ? eventsRes : [];
+
+    const chgColor = v => v == null ? "" : v >= 0 ? "color:var(--green)" : "color:var(--red)";
+    const fmt = (v, prefix="", suffix="", dp=2) =>
+      v == null ? "—" : `${prefix}${typeof v === "number" ? v.toFixed(dp) : v}${suffix}`;
+
+    // ── Data-driven thesis generation ──────────────────────────────────
+    // Helpers
+    const _pctStr  = v => v == null ? null : (v >= 0 ? "+" : "") + (v*100).toFixed(1) + "%";
+    // revenue_history items: {period, revenue (B), net_income (B), gross_margin_pct (0-100), revenue_growth_qoq_pct}
+    // API returns newest quarter first — reverse so charts read oldest → newest
+    const _revHist = (f?.revenue_history || []).slice().reverse();
+    const _revTrend = (() => {
+      if (_revHist.length < 2) return null;
+      const first = _revHist[0].revenue, last = _revHist[_revHist.length-1].revenue;
+      if (first == null || last == null || first === 0) return null;
+      const g = (last - first) / Math.abs(first);
+      return { pct: g, label: g > 0.1 ? "accelerating" : g > 0 ? "growing" : "contracting", periods: _revHist.length };
+    })();
+    const _earnTrend = (() => {
+      if (_revHist.length < 2) return null;
+      const last = _revHist[_revHist.length-1].net_income;
+      const prev = _revHist[_revHist.length-2].net_income;
+      if (last == null || prev == null || prev === 0) return null;
+      return { pct: (last - prev) / Math.abs(prev) };
+    })();
+    const _gmTrend = (() => {
+      const gmVals = _revHist.map(d => d.gross_margin_pct).filter(v => v != null);
+      if (gmVals.length < 2) return null;
+      const first = gmVals[0], last = gmVals[gmVals.length-1];
+      return { current: last, delta: last - first };
+    })();
+    const _mlBull = ml?.ml_predicted_outcome === "profitable" && (ml?.ml_confidence||0) >= 0.52;
+    const _mlBear = ml?.ml_predicted_outcome === "unprofitable" && (ml?.ml_confidence||0) >= 0.52;
+    const _upside = f?.analyst_upside_pct;
+    const _rec    = f?.analyst_recommendation;
+    const _posEvents = events.filter(ev => (ev.impact_score||ev.credibility_score||0) > 0);
+    const _negEvents = events.filter(ev => (ev.impact_score||0) < 0);
+    const _desc = f?.company_description ? f.company_description.split(".")[0] + "." : null;
+
+    // Bull case
+    let bullParts = [];
+    if (_revTrend && _revTrend.pct > 0)
+      bullParts.push(`Revenue is ${_revTrend.label} (${_pctStr(_revTrend.pct)} over ${_revTrend.periods} quarters reported).`);
+    if (_gmTrend && _gmTrend.current > 50)
+      bullParts.push(`Gross margin at ${_gmTrend.current.toFixed(1)}%${_gmTrend.delta > 0 ? ', expanding ' + _gmTrend.delta.toFixed(1) + 'pp' : ''}.`);
+    if (_upside != null && _upside > 10)
+      bullParts.push(`Analyst consensus targets ${_pctStr(_upside/100)} upside${_rec ? ' (' + _rec + ')' : ''}.`);
+    if (_mlBull && ml)
+      bullParts.push(`ML model (${Math.round((ml.ml_confidence||0)*100)}% confidence) predicts a profitable outcome on the ${(ml.horizon||"short_swing").replace("_"," ")} horizon.`);
+    if (s.opportunity_score > 0.5 && s.lag_score > 0.3)
+      bullParts.push(`Opportunity score ${Math.round(s.opportunity_score*100)}% — event not yet fully priced in (lag ${Math.round((s.lag_score||0)*100)}%).`);
+    if (_posEvents.length)
+      bullParts.push(`${_posEvents.length} active event(s) with positive directional exposure.`);
+    const bull = bullParts.length ? bullParts.join(" ") : "No strong near-term upside catalyst identified. Monitor for new positive developments.";
+
+    // Bear case
+    let bearParts = [];
+    if (_revTrend && _revTrend.pct < -0.05)
+      bearParts.push(`Revenue contraction of ${_pctStr(_revTrend.pct)} signals fundamental pressure.`);
+    if (_gmTrend && _gmTrend.delta < -3)
+      bearParts.push(`Gross margin compressed ${Math.abs(_gmTrend.delta).toFixed(1)}pp over the last reported quarters.`);
+    if (_earnTrend && _earnTrend.pct < -0.1)
+      bearParts.push(`Earnings declined ${_pctStr(_earnTrend.pct)} quarter-on-quarter.`);
+    if (s.crowding_score > 0.5)
+      bearParts.push(`High crowding (${Math.round(s.crowding_score*100)}%) — narrative may be late-stage and consensus already reflected in price.`);
+    if (s.risk_score > 0.4)
+      bearParts.push(`Risk score ${Math.round(s.risk_score*100)}% driven by ${_negEvents.length > 0 ? _negEvents.length + ' adverse event(s)' : 'elevated uncertainty'}.`);
+    if (_mlBear && ml)
+      bearParts.push(`ML model signals unprofitable outcome (${Math.round((ml.ml_confidence||0)*100)}% confidence).`);
+    if (f?.debt_to_equity != null && f.debt_to_equity > 2)
+      bearParts.push(`D/E ratio ${f.debt_to_equity.toFixed(2)}x warrants leverage monitoring.`);
+    if (f?.debt_to_equity == null && f != null)
+      bearParts.push(`D/E ratio not meaningful — likely negative shareholder equity. Balance sheet requires closer review.`);
+    const bear = bearParts.length ? bearParts.join(" ") : "Risk indicators contained. Watch for macro escalation or narrative crowding.";
+
+    // Neutral / context
+    let neutParts = [];
+    if (_desc) neutParts.push(_desc);
+    if (f?.profit_margin != null)
+      neutParts.push(`Net margin ${(f.profit_margin*100).toFixed(1)}%.`);
+    neutParts.push(`${events.length} active geopolitical/sector event(s) in scope. Decision bucket: ${s.decision_bucket||'Watch'}.`);
+    if (ml?.ml_predicted_direction && !(ml.ml_predicted_direction === "flat"))
+      neutParts.push(`ML directional signal: ${ml.ml_predicted_direction === "up" ? "▲ Up" : "▼ Down"}.`);
+    if (!_mlBull && !_mlBear && ml?.model_note)
+      neutParts.push("Model confidence low — treat ML signals as supplementary, not primary.");
+    const neut = neutParts.join(" ");
+
+    const smaLine = f ? [
+      f.above_sma_50  != null ? `<span style="${f.above_sma_50?'color:var(--green)':'color:var(--red)'}">SMA50 ${f.above_sma_50?"▲":"▼"}</span>` : null,
+      f.above_sma_200 != null ? `<span style="${f.above_sma_200?'color:var(--green)':'color:var(--red)'}">SMA200 ${f.above_sma_200?"▲":"▼"}</span>` : null,
+    ].filter(Boolean).join(" · ") : "";
+
+    const recColor = {buy:"var(--green)",strongbuy:"var(--green)",sell:"var(--red)",strongsell:"var(--red)",hold:"var(--yellow)"};
+
+    document.getElementById("stock-panel-inner").innerHTML = `
+      <h2 style="font-size:18px;margin-bottom:4px">${f?.company_name || ticker}
+        <span style="font-size:12px;color:var(--muted);font-weight:400"> · ${s.sector||""}</span>
+      </h2>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
+        ${bucketBadge(s.decision_bucket)}
+        ${f?.current_price != null ? `<span style="font-size:14px;font-weight:700">$${f.current_price.toFixed(2)}</span>` : ""}
+        ${f?.price_change_1d_pct != null ? `<span style="font-size:13px;${chgColor(f.price_change_1d_pct)}">${pct(f.price_change_1d_pct)}</span>` : ""}
+      </div>
+
+      <!-- GeoInt Scorecard -->
+      <div class="detail-section">
+        <h4>GeoInt Scorecard</h4>
+        <div class="scorecard-grid">
+          ${scoreTileHTML("Opportunity", s.opportunity_score, "fill-opp")}
+          ${scoreTileHTML("Exposure",    s.exposure_score,    "fill-exp")}
+          ${scoreTileHTML("Narrative",   s.narrative_score,   "fill-narr")}
+          ${scoreTileHTML("Lag",         s.lag_score,         "fill-lag")}
+          ${scoreTileHTML("Crowding",    s.crowding_score,    "fill-crowd")}
+          ${scoreTileHTML("Risk",        s.risk_score,        "fill-risk")}
+          ${scoreTileHTML("Impact",      s.impact_score,      "fill-cred")}
+          ${scoreTileHTML("Asymmetry",   s.asymmetry_score,   "fill-exp")}
+        </div>
+      </div>
+
+      <!-- ML Prediction -->
+      ${ml && ml.ml_available ? (() => {
+        const outcome = ml.ml_predicted_outcome || "unknown";
+        const direction = ml.ml_predicted_direction || "unknown";
+        const conf = ml.ml_confidence || 0;
+        const confPct = Math.round(conf * 100);
+        const outcomeColor = outcome === "profitable" ? "var(--green)" : outcome === "unprofitable" ? "var(--red)" : "var(--yellow)";
+        const dirArrow = direction === "up" ? "▲" : direction === "down" ? "▼" : "●";
+        const dirColor = direction === "up" ? "var(--green)" : direction === "down" ? "var(--red)" : "var(--muted)";
+        const confColor = conf >= 0.65 ? "var(--green)" : conf >= 0.52 ? "var(--yellow)" : "var(--red)";
+        const confLabel = conf >= 0.65 ? "High conviction" : conf >= 0.52 ? "Moderate" : "Low conviction — coin flip";
+        const tierColor = ml.alert_tier === "Critical" ? "var(--red)" : ml.alert_tier === "High" ? "var(--yellow)" : "var(--accent)";
+        return `
+        <div class="detail-section">
+          <h4>ML Prediction</h4>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+            <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:6px;padding:10px;text-align:center">
+              <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Outcome</div>
+              <div style="font-size:16px;font-weight:700;color:${outcomeColor}">${outcome.charAt(0).toUpperCase()+outcome.slice(1)}</div>
+            </div>
+            <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:6px;padding:10px;text-align:center">
+              <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Direction</div>
+              <div style="font-size:16px;font-weight:700;color:${dirColor}">${dirArrow} ${direction.charAt(0).toUpperCase()+direction.slice(1)}</div>
+            </div>
+            <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:6px;padding:10px;text-align:center">
+              <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Confidence</div>
+              <div style="font-size:16px;font-weight:700;color:${confColor}">${confPct}%</div>
+            </div>
+          </div>
+          <div style="font-size:11px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap">
+            <span>Conviction: <span style="color:${confColor}">${confLabel}</span></span>
+            ${ml.alert_tier ? `<span>From <span style="color:${tierColor}">${ml.alert_tier}</span> alert</span>` : ""}
+            ${ml.horizon ? `<span>Horizon: ${ml.horizon.replace("_"," ")}</span>` : ""}
+            ${ml.regime_label ? `<span>Regime: ${ml.regime_label}</span>` : ""}
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:6px;font-style:italic">${ml.model_note||""}</div>
+        </div>`;
+      })() : ml ? `
+        <div class="detail-section">
+          <h4>ML Prediction</h4>
+          <div style="color:var(--muted);font-size:12px">${ml.model_note || "No ML prediction available yet. Run /alerts/sweep to generate predictions for new alerts."}</div>
+        </div>` : ""}
+
+      <!-- Thesis -->
+      <div class="detail-section">
+        <h4>Current Thesis</h4>
+        <div class="thesis-grid">
+          <div class="thesis-box bull"><div class="tb-label">Bull Case</div><p>${bull}</p></div>
+          <div class="thesis-box bear"><div class="tb-label">Bear Case</div><p>${bear}</p></div>
+          <div class="thesis-box neut"><div class="tb-label">Neutral</div><p>${neut}</p></div>
+        </div>
+      </div>
+
+      ${f ? `
+      <!-- Price Block -->
+      <div class="detail-section">
+        <h4>Price & Momentum</h4>
+        <div class="fund-grid">
+          ${fundTileHTML("Price",   fmt(f.current_price, "$"), "")}
+          ${fundTileHTML("1D",      pct(f.price_change_1d_pct), chgColor(f.price_change_1d_pct))}
+          ${fundTileHTML("5D",      pct(f.price_change_5d_pct), chgColor(f.price_change_5d_pct))}
+          ${fundTileHTML("1M",      pct(f.price_change_1m_pct), chgColor(f.price_change_1m_pct))}
+        </div>
+        ${f.week_52_low != null && f.week_52_high != null && f.current_price != null ? `
+        <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);margin:10px 0">
+          <span>$${f.week_52_low.toFixed(2)}</span>
+          <div style="flex:1;height:5px;background:var(--border);border-radius:3px;position:relative">
+            <div style="position:absolute;height:100%;background:var(--accent);border-radius:3px;
+              width:${Math.min(100,Math.max(0,((f.current_price-f.week_52_low)/(f.week_52_high-f.week_52_low)*100))).toFixed(1)}%"></div>
+          </div>
+          <span>$${f.week_52_high.toFixed(2)}</span>
+          <span>(${fmt(f.week_52_pct_from_high,"","% from high")})</span>
+        </div>` : ""}
+      </div>
+
+      <!-- Technicals -->
+      <div class="detail-section">
+        <h4>Technicals</h4>
+        <div class="fund-grid">
+          ${fundTileHTML("RSI-14", f.rsi_14 != null ? f.rsi_14.toFixed(1) : "—", f.rsi_14 >= 70 ? "color:var(--red)" : f.rsi_14 <= 30 ? "color:var(--green)" : "")}
+          ${fundTileHTML("Vol Ratio", fmt(f.volume_ratio,"","x"), f.volume_ratio > 1.5 ? "color:var(--yellow)" : "")}
+          ${fundTileHTML("Beta", fmt(f.beta,"","",2), "")}
+        </div>
+        ${smaLine ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">${smaLine}</div>` : ""}
+      </div>
+
+      <!-- Valuation -->
+      <div class="detail-section">
+        <h4>Valuation</h4>
+        <div class="fund-grid">
+          ${fundTileHTML("Mkt Cap",   mktcap(f.market_cap), "")}
+          ${fundTileHTML("P/E",       fmt(f.pe_ratio,"","",1), "")}
+          ${fundTileHTML("Fwd P/E",   fmt(f.forward_pe,"","",1), "")}
+          ${fundTileHTML("P/B",       fmt(f.pb_ratio,"","",2), "")}
+          ${fundTileHTML("EV/EBITDA", fmt(f.ev_ebitda,"","",1), "")}
+          ${fundTileHTML("Div Yield", f.dividend_yield != null ? pct(f.dividend_yield*100) : "—", "color:var(--green)")}
+        </div>
+      </div>
+
+      <!-- Quality -->
+      <div class="detail-section">
+        <h4>Quality & Growth</h4>
+        <div class="fund-grid">
+          ${fundTileHTML("Rev Growth",  pct(f.revenue_growth_yoy != null ? f.revenue_growth_yoy*100 : null), chgColor(f.revenue_growth_yoy))}
+          ${fundTileHTML("Earn Growth", pct(f.earnings_growth_yoy != null ? f.earnings_growth_yoy*100 : null), chgColor(f.earnings_growth_yoy))}
+          ${fundTileHTML("Margin",      pct(f.profit_margin != null ? f.profit_margin*100 : null), "")}
+          ${fundTileHTML("D/E",
+            f.debt_to_equity != null ? f.debt_to_equity.toFixed(2) + "x" : "N/M",
+            f.debt_to_equity == null ? "color:var(--muted)" : f.debt_to_equity > 2 ? "color:var(--red)" : "")}
+        </div>
+      </div>
+
+      <!-- Analyst -->
+      <div class="detail-section">
+        <h4>Analyst Consensus</h4>
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          ${f.analyst_recommendation ? `<span style="background:rgba(0,0,0,.3);padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;text-transform:uppercase;color:${recColor[f.analyst_recommendation]||'var(--muted)'}">${f.analyst_recommendation}</span>` : ""}
+          ${f.analyst_target_price != null ? `<span style="font-size:13px">Target: <strong>$${f.analyst_target_price.toFixed(2)}</strong></span>` : ""}
+          ${f.analyst_upside_pct != null ? `<span style="font-size:13px;${chgColor(f.analyst_upside_pct)}">Upside: <strong>${pct(f.analyst_upside_pct)}</strong></span>` : ""}
+        </div>
+      </div>
+
+      <!-- Company Description -->
+      ${f?.company_description ? `
+      <div class="detail-section">
+        <h4>About the Company</h4>
+        <p style="font-size:12px;line-height:1.7;color:var(--text)">${f.company_description}</p>
+      </div>` : ""}
+
+      <!-- Financial History -->
+      ${f && _revHist.length ? (() => {
+        // revenue_history items (already reversed to oldest→newest):
+        //   { period: "YYYY-MM-DD", revenue: B$, net_income: B$, gross_margin_pct: 0-100 }
+        const _barChart = (history, valueKey, formatFn, colorFn) => {
+          const vals = history.map(d => d[valueKey]).filter(v => v != null);
+          if (!vals.length) return "<span style='color:var(--muted);font-size:11px'>No data</span>";
+          const maxVal = Math.max(...vals.map(Math.abs));
+          if (maxVal === 0) return "<span style='color:var(--muted);font-size:11px'>No data</span>";
+          return history.map((d, i) => {
+            const v = d[valueKey];
+            if (v == null) return "";
+            const heightPct = Math.min(100, (Math.abs(v) / maxVal) * 100);
+            const color = colorFn(v, d, i, history);
+            // Period is "YYYY-MM-DD" — shorten to "MMM 'YY"
+            const periodStr = d.period || "";
+            let label = periodStr;
+            try {
+              const dt = new Date(periodStr);
+              label = dt.toLocaleDateString("en-US", {month:"short", year:"2-digit"});
+            } catch(e) {}
+            return `
+              <div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;min-width:0">
+                <div style="font-size:9px;color:var(--muted);white-space:nowrap;text-align:center">${formatFn(v)}</div>
+                <div style="width:100%;flex:1;display:flex;align-items:flex-end">
+                  <div style="width:100%;height:${heightPct.toFixed(1)}%;background:${color};border-radius:2px 2px 0 0;min-height:3px"></div>
+                </div>
+                <div style="font-size:9px;color:var(--muted2);white-space:nowrap;text-align:center">${label}</div>
+              </div>`;
+          }).join("");
+        };
+
+        // Values from API: revenue & net_income are already in $B; gross_margin_pct is 0-100
+        const _fmtB  = v => v == null ? "—" : Math.abs(v) >= 1 ? "$" + v.toFixed(1) + "B" : "$" + (v*1000).toFixed(0) + "M";
+        const _fmtGM = v => v == null ? "—" : v.toFixed(1) + "%";
+
+        const hist = _revHist.slice(-6);  // up to 6 quarters, oldest first
+
+        const hasRev  = hist.some(d => d.revenue != null);
+        const hasNI   = hist.some(d => d.net_income != null);
+        const hasGM   = hist.some(d => d.gross_margin_pct != null);
+
+        const revBars = _barChart(hist, "revenue", _fmtB,
+          (v, d, i, arr) => i > 0 && arr[i-1].revenue != null && v >= arr[i-1].revenue ? "var(--green)" : "var(--accent)");
+        const niBars = _barChart(hist, "net_income", _fmtB,
+          v => v >= 0 ? "var(--green)" : "var(--red)");
+        const gmBars = _barChart(hist, "gross_margin_pct", _fmtGM,
+          (v, d, i, arr) => i === 0 ? "var(--accent)" : (arr[i-1].gross_margin_pct != null && v >= arr[i-1].gross_margin_pct ? "var(--green)" : "var(--yellow)"));
+
+        return `
+        <div class="detail-section">
+          <h4>Financial History (Quarterly)</h4>
+
+          ${hasRev ? `
+          <div style="margin-bottom:16px">
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Revenue</div>
+            <div style="display:flex;gap:4px;height:80px">${revBars}</div>
+          </div>` : ""}
+
+          ${hasNI ? `
+          <div style="margin-bottom:16px">
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Net Income</div>
+            <div style="display:flex;gap:4px;height:80px">${niBars}</div>
+          </div>` : ""}
+
+          ${hasGM ? `
+          <div style="margin-bottom:4px">
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Gross Margin</div>
+            <div style="display:flex;gap:4px;height:80px">${gmBars}</div>
+          </div>` : ""}
+        </div>`;
+      })() : ""}
+
+      ` : `<div style="color:var(--muted);font-size:12px;margin-bottom:16px">Live price data unavailable (yfinance not reachable)</div>`}
+
+      <!-- Linked Events -->
+      ${events.length ? `
+      <div class="detail-section">
+        <h4>Active Event Exposures (${events.length})</h4>
+        ${events.map(ev => `
+          <div class="article-card" onclick="openEventDetail(${ev.event_id})" style="cursor:pointer">
+            <div class="ac-src"><span class="badge type-${ev.event_type||'sector'}">${ev.event_type||'sector'}</span> · <span class="badge stage-${ev.narrative_stage}">${ev.narrative_stage}</span></div>
+            <div class="ac-headline">${ev.title}</div>
+            <div class="ac-meta">Credibility: ${Math.round((ev.credibility_score||0)*100)}% · ${relTime(ev.timestamp)}</div>
+          </div>`).join("")}
+      </div>` : ""}
+
+      <div style="font-size:10px;color:var(--muted2);margin-top:16px">
+        ${f ? `Live data: Yahoo Finance · ${f.fetched_at ? new Date(f.fetched_at+"Z").toLocaleTimeString() : "—"}` : ""}
+      </div>
+    `;
+  } catch (err) {
+    document.getElementById("stock-panel-inner").innerHTML =
+      `<p style="color:var(--muted);font-size:13px">Error loading ${ticker}: ${err.message}</p>`;
+  }
+}
+
+function scoreTileHTML(label, val, fillClass) {
+  const p = val != null ? Math.round(val * 100) : null;
+  return `<div class="score-tile">
+    <div class="st-label">${label}</div>
+    <div class="st-val">${p != null ? p+"%" : "—"}</div>
+    ${p != null ? `<div class="st-bar"><div class="track"><div class="fill ${fillClass}" style="width:${p}%"></div></div></div>` : ""}
+  </div>`;
+}
+function fundTileHTML(label, value, style) {
+  return `<div class="fund-tile">
+    <div class="ft-label">${label}</div>
+    <div class="ft-val" style="${style||""}">${value}</div>
+  </div>`;
+}
+
+// ─── Open Event Detail ────────────────────────────────────────────────────
+async function openEventDetail(eventId) {
+  if (!eventId) return;
+  document.getElementById("event-panel-inner").innerHTML =
+    `<div class="loading"><span class="spinner"></span>Loading event #${eventId}…</div>`;
+  openPanel("event-panel");
+
+  try {
+    const [ev, impacts] = await Promise.all([
+      api(`/events/${eventId}`),
+      api(`/events/${eventId}/impacts`),
+    ]);
+
+    const credPct = Math.round((ev.credibility_score||0) * 100);
+    const articles = ev.articles || [];
+
+    // Build confirmed/disputed/unknown from article metadata
+    const confirmed  = articles.filter(a => a.has_official_confirm).map(a => a.source);
+    const disputed   = articles.filter(a => a.contradiction_flag).map(a => a.source);
+    const unknown    = articles.filter(a => !a.has_official_confirm && !a.contradiction_flag).length;
+
+    // Why it matters — derive from event type + impacts
+    const topImpact  = impacts.sort((a,b) => Math.abs(b.impact_score)-Math.abs(a.impact_score))[0];
+    const posImpacts = impacts.filter(i => i.impact_score > 0.02);
+    const negImpacts = impacts.filter(i => i.impact_score < -0.02);
+
+    const whyMatters = whyItMattersText(ev.event_type);
+
+    // Source tiers
+    const PRIMARY_SOURCES = ["reuters","bloomberg","ap","bbc","financial times","sec","federal reserve","wsj","wall street journal","ft","ap news"];
+    const sortedArticles = [...articles].sort((a, b) => {
+      const aScore = PRIMARY_SOURCES.some(p => a.source.toLowerCase().includes(p)) ? 2 : a.is_primary_source ? 1 : 0;
+      const bScore = PRIMARY_SOURCES.some(p => b.source.toLowerCase().includes(p)) ? 2 : b.is_primary_source ? 1 : 0;
+      return bScore - aScore;
+    });
+
+    document.getElementById("event-panel-inner").innerHTML = `
+      <h2 style="font-size:16px;line-height:1.4;margin-bottom:10px">${ev.title}</h2>
+
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px">
+        <span class="badge type-${eventTypeCss(ev.event_type)}">${fmtEventType(ev.event_type)}</span>
+        <span class="badge stage-${ev.narrative_stage}">${ev.narrative_stage}</span>
+        <span class="badge tier-${credPct>=70?'Critical':credPct>=50?'High':'Monitor'}">Cred ${credPct}%</span>
+        <span style="font-size:11px;color:var(--muted);align-self:center">${relTime(ev.timestamp)}</span>
+        <span style="font-size:11px;color:var(--muted);align-self:center">${articles.length} source(s)</span>
+      </div>
+
+      <!-- What Happened -->
+      <div class="detail-section">
+        <h4>What Happened</h4>
+        <p style="font-size:12px;line-height:1.7;color:var(--text)">${ev.summary || "No summary available."}</p>
+      </div>
+
+      <!-- Confirmed / Disputed / Unknown -->
+      <div class="detail-section">
+        <h4>Evidence Assessment</h4>
+        <div class="confirmed-grid">
+          <div class="confirmed-box">
+            <div class="cb-label green">✓ Confirmed</div>
+            <p>${confirmed.length ? confirmed.join(", ") : "No official confirmation yet."}</p>
+          </div>
+          <div class="confirmed-box">
+            <div class="cb-label yellow">⚠ Disputed</div>
+            <p>${disputed.length ? disputed.join(", ") + " contradicts cluster." : "No contradictions detected."}</p>
+          </div>
+          <div class="confirmed-box">
+            <div class="cb-label muted">? Unknown</div>
+            <p>${unknown} source(s) unconfirmed. ${credPct < 60 ? "Treat with caution." : "Credibility above threshold."}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Why It Matters -->
+      <div class="detail-section">
+        <h4>Why It Matters</h4>
+        <p style="font-size:12px;line-height:1.7;color:var(--text);margin-bottom:10px">${whyMatters}</p>
+        ${posImpacts.length ? `<div style="font-size:11px;margin-bottom:6px"><strong style="color:var(--green)">Positive exposure:</strong> ${posImpacts.map(i=>`<span class="stock-chip" onclick="openStockDetail('${i.ticker}')">${i.ticker} +${(i.impact_score*100).toFixed(1)}%</span>`).join("")}</div>` : ""}
+        ${negImpacts.length ? `<div style="font-size:11px"><strong style="color:var(--red)">Negative exposure:</strong> ${negImpacts.map(i=>`<span class="stock-chip" style="background:rgba(248,81,73,.12);color:var(--red)" onclick="openStockDetail('${i.ticker}')">${i.ticker} ${(i.impact_score*100).toFixed(1)}%</span>`).join("")}</div>` : ""}
+      </div>
+
+      <!-- Market Impact Map -->
+      ${impacts.length ? `
+      <div class="detail-section">
+        <h4>Market Impact Map</h4>
+        <div style="display:flex;flex-wrap:wrap;gap:4px">
+          ${impacts.map(i => {
+            const cls = i.impact_score > 0.02 ? "impact-pos" : i.impact_score < -0.02 ? "impact-neg" : "impact-neu";
+            const arrow = i.impact_score > 0.02 ? "▲" : i.impact_score < -0.02 ? "▼" : "●";
+            return `<span class="impact-chip ${cls}" onclick="openStockDetail('${i.ticker}')">
+              ${arrow} ${i.ticker} ${(i.impact_score*100).toFixed(1)}%
+              ${i.sector ? `<span style="font-size:9px;opacity:.6">${i.sector}</span>` : ""}
+            </span>`;
+          }).join("")}
+        </div>
+      </div>` : ""}
+
+      <!-- Source Evidence (ranked by tier) -->
+      <div class="detail-section">
+        <h4>Source Evidence</h4>
+        ${sortedArticles.map(a => {
+          const isPrimary = PRIMARY_SOURCES.some(p => a.source.toLowerCase().includes(p)) || a.is_primary_source;
+          const tierLabel = a.has_official_confirm ? "OFFICIAL" : isPrimary ? "PRIMARY" : "SECONDARY";
+          const tierColor = a.has_official_confirm ? "var(--yellow)" : isPrimary ? "var(--green)" : "var(--muted)";
+          return `<div class="article-card">
+            <div class="ac-src" style="display:flex;justify-content:space-between">
+              <span>${a.source}</span>
+              <span style="color:${tierColor};font-size:9px;font-weight:700">${tierLabel}</span>
+            </div>
+            <div class="ac-headline">${a.headline}</div>
+            <div class="ac-meta">
+              ${a.contradiction_flag ? `<span style="color:var(--red);font-size:9px;font-weight:700">⚠ CONTRADICTS · </span>` : ""}
+              ${relTime(a.timestamp)}
+            </div>
+          </div>`;
+        }).join("")}
+      </div>
+
+      <div style="display:flex;gap:6px;margin-top:12px">
+        <button class="secondary" style="font-size:11px" onclick="navigate('events')">← Events</button>
+        <button class="secondary" style="font-size:11px" onclick="submitEventFeedback(${ev.event_id})">Rate this Event</button>
+      </div>
+    `;
+  } catch (err) {
+    document.getElementById("event-panel-inner").innerHTML =
+      `<p style="color:var(--muted);font-size:13px">Error: ${err.message}</p>`;
+  }
+}
+
+function submitEventFeedback(eventId) {
+  document.getElementById("fb-event-id").value = eventId;
+  closePanel("event-panel");
+  navigate("feedback");
+}
+
+// ─── Narratives ───────────────────────────────────────────────────────────
+const NARRATIVES = [
+  { title: "AI Infrastructure Demand", keywords: ["nvidia","tsmc","ai","semiconductor","chip","data center"], stocks: ["NVDA","TSM","ASML","AMAT","MU"], type: "sector" },
+  { title: "China Export Restrictions", keywords: ["china","export control","ban","semiconductor","chip"], stocks: ["NVDA","ASML","LRCX","AMAT","TSM"], type: "geopolitical" },
+  { title: "Taiwan Geopolitical Risk", keywords: ["taiwan","strait","pla","tsmc","china"], stocks: ["TSM","NVDA","AAPL","ASML"], type: "geopolitical" },
+  { title: "Energy Supply Shock", keywords: ["oil","opec","iran","hormuz","crude","brent"], stocks: ["XOM","CVX","UNG","GLD"], type: "geopolitical" },
+  { title: "Defense Spending Escalation", keywords: ["defense","military","war","nato","weapons","ukraine"], stocks: ["LMT","RTX","BA"], type: "geopolitical" },
+  { title: "Fed Rate Policy", keywords: ["federal reserve","rate","inflation","interest rate","cpi","treasury"], stocks: ["GS","JPM","TLT","GLD"], type: "macro" },
+  { title: "Food & Agriculture Risk", keywords: ["wheat","grain","food","ukraine","black sea","drought"], stocks: ["DBA","GLD"], type: "geopolitical" },
+];
+
+// ─── Signals — News → Stock ───────────────────────────────────────────────
+async function loadSignals() {
+  const body = document.getElementById("signals-body");
+  const minConf = parseFloat(document.getElementById("sig-confidence")?.value || "0.52");
+  body.innerHTML = `<div class="loading"><span class="spinner"></span>Loading signals…</div>`;
+
+  try {
+    const data = await api(`/stocks/signals?min_confidence=${minConf}&limit=30`);
+    const signals = data.signals || [];
+
+    if (!signals.length) {
+      body.innerHTML = `<div style="color:var(--muted);padding:24px;text-align:center">
+        No signals above ${Math.round(minConf*100)}% confidence.<br>
+        <span style="font-size:11px">Run <code>POST /alerts/sweep</code> then try again.</span>
+      </div>`;
+      return;
+    }
+
+    const dirIcon  = d => d === "up" ? "▲" : d === "down" ? "▼" : "●";
+    const dirColor = d => d === "up" ? "var(--green)" : d === "down" ? "var(--red)" : "var(--muted)";
+    const outcomeColor = o => o === "profitable" ? "var(--green)" : o === "unprofitable" ? "var(--red)" : "var(--yellow)";
+    const convColor = c => c === "High" ? "var(--green)" : c === "Moderate" ? "var(--yellow)" : "var(--muted)";
+    const tierColor = t => t === "Critical" ? "var(--red)" : t === "High" ? "var(--yellow)" : "var(--accent)";
+    const impactIcon = s => s > 0 ? "▲ Positive" : s < 0 ? "▼ Negative" : "● Neutral";
+    const impactColor = s => s > 0 ? "var(--green)" : s < 0 ? "var(--red)" : "var(--muted)";
+
+    body.innerHTML = `
+      <div style="margin-bottom:14px;font-size:12px;color:var(--muted)">
+        ${signals.length} signal${signals.length!==1?"s":""} — ranked by ML confidence.
+        Signals above 65% have high conviction; below 52% are noise.
+      </div>
+      ${signals.map(sig => `
+        <div onclick="openStockDetail('${sig.ticker}')"
+             style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;
+                    padding:14px 16px;margin-bottom:10px;cursor:pointer;
+                    border-left:3px solid ${dirColor(sig.ml_predicted_direction)};
+                    transition:border-color .15s">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+            <span style="font-size:16px;font-weight:700">${sig.ticker}</span>
+            <span style="font-size:11px;color:var(--muted)">${sig.company_name}</span>
+            <span style="margin-left:auto;font-size:13px;font-weight:700;color:${dirColor(sig.ml_predicted_direction)}">
+              ${dirIcon(sig.ml_predicted_direction)} ${(sig.ml_predicted_direction||"flat").toUpperCase()}
+            </span>
+            <span style="font-size:12px;color:${outcomeColor(sig.ml_predicted_outcome)}">${sig.ml_predicted_outcome}</span>
+            <span style="font-size:11px;padding:2px 7px;background:rgba(255,255,255,.06);border-radius:4px;color:${convColor(sig.conviction)}">
+              ${sig.conviction} · ${Math.round(sig.ml_confidence*100)}%
+            </span>
+          </div>
+
+          <div style="font-size:11px;color:var(--text);margin-bottom:6px;line-height:1.5">
+            <strong style="color:var(--muted);text-transform:uppercase;font-size:10px;letter-spacing:.4px">Driven by:</strong>
+            ${sig.event_title}
+          </div>
+
+          <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--muted)">
+            <span>Type: <strong style="color:var(--text)">${fmtEventType(sig.event_type)}</strong></span>
+            <span>Stage: <strong style="color:var(--text)">${sig.narrative_stage}</strong></span>
+            <span>Credibility: <strong style="color:var(--text)">${Math.round(sig.event_credibility*100)}%</strong></span>
+            <span>Alert: <strong style="color:${tierColor(sig.alert_tier)}">${sig.alert_tier}</strong></span>
+            <span>Horizon: <strong style="color:var(--text)">${(sig.horizon||"short_swing").replace("_"," ")}</strong></span>
+            <span>Impact: <strong style="color:${impactColor(sig.impact_score)}">${impactIcon(sig.impact_score)}</strong></span>
+            <span>Opp: <strong style="color:var(--text)">${Math.round(sig.opportunity_score*100)}%</strong></span>
+            <span>Risk: <strong style="color:var(--text)">${Math.round(sig.risk_score*100)}%</strong></span>
+            ${sig.decision_bucket !== "Watch" ? `<span>Bucket: <strong style="color:var(--accent)">${sig.decision_bucket}</strong></span>` : ""}
+          </div>
+        </div>
+      `).join("")}
+    `;
+  } catch(e) {
+    body.innerHTML = `<div style="color:var(--red);padding:24px">Failed to load signals: ${e.message}</div>`;
+  }
+}
+
+async function loadNarratives() {
+  const container = document.getElementById("narratives-container");
+  container.innerHTML = `<div class="loading"><span class="spinner"></span>Building narrative map…</div>`;
+
+  try {
+    // Fetch events to score narratives
+    const events = await api("/events/?limit=100");
+    const scores = await api("/stocks/?limit=100");
+    const scoreMap = {};
+    scores.forEach(s => { scoreMap[s.ticker] = s; });
+
+    const narrativeHTML = NARRATIVES.map(n => {
+      const relEvents = events.filter(ev => {
+        const text = (ev.title + " " + (ev.summary||"")).toLowerCase();
+        return n.keywords.some(kw => text.includes(kw));
+      });
+      const stageVotes = relEvents.map(e => e.narrative_stage);
+      const stageCount = {};
+      stageVotes.forEach(s => { stageCount[s] = (stageCount[s]||0)+1; });
+      const dominantStage = Object.entries(stageCount).sort((a,b)=>b[1]-a[1])[0]?.[0] || "emerging";
+      const avgCred = relEvents.length
+        ? (relEvents.reduce((s,e) => s + e.credibility_score, 0) / relEvents.length)
+        : 0;
+      const velocity = relEvents.length;
+
+      return `<div class="narrative-card">
+        <div class="nc-top">
+          <h4>${n.title}</h4>
+          <div style="display:flex;gap:6px">
+            <span class="badge stage-${dominantStage}">${dominantStage}</span>
+            <span class="badge type-${eventTypeCss(n.type)}">${fmtEventType(n.type)}</span>
+          </div>
+        </div>
+        <div class="nc-meta">
+          <span style="font-size:11px;color:var(--muted)">${velocity} event(s) · Avg credibility: ${Math.round(avgCred*100)}%</span>
+        </div>
+        <div class="nc-desc">
+          ${relEvents.slice(0,2).map(e => `• ${truncate(e.title, 80)}`).join("<br>") || "No recent events detected for this narrative."}
+        </div>
+        <div class="nc-stocks">
+          ${n.stocks.map(t => {
+            const s = scoreMap[t];
+            if (!s) return `<span class="stock-chip" onclick="openStockDetail('${t}')">${t}</span>`;
+            const color = s.opportunity_score > 0.5 ? "rgba(63,185,80,.14)" : s.risk_score > 0.5 ? "rgba(248,81,73,.12)" : "rgba(56,139,253,.14)";
+            const textColor = s.opportunity_score > 0.5 ? "var(--green)" : s.risk_score > 0.5 ? "var(--red)" : "var(--accent)";
+            return `<span class="stock-chip" style="background:${color};color:${textColor}" onclick="openStockDetail('${t}')">${t} ${Math.round((s.opportunity_score||0)*100)}%</span>`;
+          }).join("")}
+        </div>
+      </div>`;
+    }).join("");
+
+    container.innerHTML = `
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px">
+        Narrative themes derived from active events. Opportunity % shown per ticker.
+      </div>
+      ${narrativeHTML}
+    `;
+  } catch (err) {
+    container.innerHTML = `<div class="empty">Error loading narratives: ${err.message}</div>`;
+  }
+}
+
+// ─── Alerts ───────────────────────────────────────────────────────────────
+async function loadAlerts() {
+  const tier = document.getElementById("filter-tier")?.value || "";
+  let url = "/alerts/?active_only=true&limit=100";
+  if (tier) url += `&tier=${tier}`;
+  const container = document.getElementById("alerts-list");
+  container.innerHTML = `<div class="loading"><span class="spinner"></span>Loading…</div>`;
+  try {
+    const alerts = await api(url);
+    if (!alerts.length) {
+      container.innerHTML = `<div class="empty">No active alerts.</div>`;
+      return;
+    }
+    container.innerHTML = alerts.map(a => `
+      <div class="card" style="margin-bottom:8px">
+        <div class="card-body" style="padding:10px 14px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+            <div style="flex:1">
+              <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+                <span class="badge tier-${a.tier}">${a.tier}</span>
+                <span style="font-size:10px;color:var(--muted)">${relTime(a.timestamp)}</span>
+              </div>
+              <div style="font-size:12px;color:var(--muted);line-height:1.5">${a.message}</div>
+              ${a.event_title ? `<div class="text-link" style="margin-top:6px" onclick="openEventDetail(${a.event_id})">→ ${truncate(a.event_title,60)}</div>` : ""}
+            </div>
+            <button class="danger" style="font-size:10px;padding:3px 8px;white-space:nowrap"
+              onclick="dismissAlert(${a.id}, this)">Dismiss</button>
+          </div>
+        </div>
+      </div>`).join("");
+  } catch (err) {
+    container.innerHTML = `<div class="empty">Error: ${err.message}</div>`;
+  }
+}
+
+async function dismissAlert(id, btn) {
+  btn.disabled = true;
+  btn.textContent = "…";
+  try {
+    await api(`/alerts/${id}/dismiss`, { method: "POST" });
+    btn.closest(".card").style.opacity = "0.35";
+    showToast("Alert dismissed");
+    loadSidebarAlerts();
+  } catch (err) {
+    showToast("Error: " + err.message, "error");
+    btn.disabled = false;
+    btn.textContent = "Dismiss";
+  }
+}
+
+async function runAlertSweep() {
+  showToast("Running alert sweep…");
+  try {
+    const res = await api("/alerts/sweep", { method: "POST" });
+    showToast(`✓ ${res.alerts_triggered} new alert(s) triggered`);
+    loadAlerts();
+    loadSidebarAlerts();
+    loadDashboard();
+  } catch (err) {
+    showToast("Error: " + err.message, "error");
+  }
+}
+
+// ─── Daily Brief ──────────────────────────────────────────────────────────
+async function loadBrief() {
+  const el = document.getElementById("brief-text");
+  el.textContent = "Loading…";
+  el.className = "loading";
+  try {
+    const brief = await api("/daily-brief");
+    el.textContent = brief.summary_text;
+    el.className = "";
+  } catch (err) {
+    el.textContent = "No brief generated yet. Click 'Generate New Brief' to create one.";
+    el.className = "empty";
+  }
+}
+async function generateBrief() {
+  showToast("Generating brief…");
+  try {
+    const brief = await api("/daily-brief/generate", { method: "POST" });
+    document.getElementById("brief-text").textContent = brief.summary_text;
+    document.getElementById("brief-text").className = "";
+    showToast("✓ Brief generated");
+  } catch (err) {
+    showToast("Error: " + err.message, "error");
+  }
+}
+
+// ─── Ingest ───────────────────────────────────────────────────────────────
+async function triggerIngest() {
+  showToast("Ingesting feeds…");
+  try {
+    const res = await api("/events/ingest-feeds", { method: "POST" });
+    showToast(`✓ ${res.message}`);
+    refreshAll();
+  } catch (err) {
+    showToast("Error: " + err.message, "error");
+  }
+}
+
+async function triggerAdminRefresh() {
+  showToast("Starting feed refresh…");
+  try {
+    await api("/admin/refresh", { method: "POST" });
+    showToast("✓ Feed refresh started. Scores will update in ~60s.");
+    setTimeout(refreshAll, 15000);
+  } catch (err) {
+    // Fall back to the events endpoint if admin router not yet active
+    try {
+      const res = await api("/events/ingest-feeds", { method: "POST" });
+      showToast(`✓ ${res.message}`);
+      refreshAll();
+    } catch (e2) {
+      showToast("Error: " + e2.message, "error");
+    }
+  }
+}
+
+// ─── Feedback ─────────────────────────────────────────────────────────────
+async function submitFeedback() {
+  const payload = {
+    event_id: document.getElementById("fb-event-id").value ? parseInt(document.getElementById("fb-event-id").value) : null,
+    ticker:   document.getElementById("fb-ticker").value.toUpperCase() || null,
+    rating:   parseInt(document.getElementById("fb-rating").value),
+    comment:  document.getElementById("fb-comment").value || null,
+  };
+  try {
+    await api("/feedback", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(payload) });
+    showToast("✓ Feedback submitted");
+    document.getElementById("fb-comment").value = "";
+  } catch (err) {
+    showToast("Error: " + err.message, "error");
+  }
+}
+
+// ─── Refresh ──────────────────────────────────────────────────────────────
+function refreshAll() {
+  const active = document.querySelector(".page.active");
+  if (active) {
+    const page = active.id.replace("page-", "");
+    pageLoaders[page]?.();
+  }
+  loadSidebarAlerts();
+  document.getElementById("last-refresh").textContent =
+    "Updated " + new Date().toLocaleTimeString();
+}
+
+// ─── Emerging Picks (news-driven stock recommendations) ──────────────────
+async function loadEmergingPicks(forceRefresh = false) {
+  const container = document.getElementById("emerging-picks-body");
+  if (!container) return;
+
+  const hours = document.getElementById("ep-hours")?.value || "24";
+  const url   = `/stocks/emerging?hours=${hours}&min_confidence=0.45&limit=20${forceRefresh ? "&force_refresh=true" : ""}`;
+
+  if (forceRefresh) {
+    container.innerHTML = `<div class="loading" style="padding:16px"><span class="spinner"></span>Scanning news for emerging stocks…</div>`;
+  }
+
+  try {
+    const resp  = await api(url);
+    const items = resp.items || [];
+
+    document.getElementById("ep-last-updated").textContent =
+      `Updated ${new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}`;
+
+    if (!items.length) {
+      container.innerHTML = `
+        <div style="padding:20px;text-align:center;color:var(--muted);font-size:12px">
+          No emerging picks found for the last ${hours}h.<br>
+          <span style="font-size:11px">Ingest more feeds or expand the time window.</span>
+        </div>`;
+      return;
+    }
+
+    const dirIcon = d => d === "bullish" ? `<span style="color:var(--green)">▲</span>`
+                       : d === "bearish" ? `<span style="color:var(--red)">▼</span>`
+                       : d === "mixed"   ? `<span style="color:var(--yellow)">↕</span>`
+                       :                  `<span style="color:var(--muted)">—</span>`;
+
+    const dirBadge = d => {
+      const colors = {bullish:"var(--green)", bearish:"var(--red)", mixed:"var(--yellow)", neutral:"var(--muted)"};
+      const c = colors[d] || "var(--muted)";
+      return `<span style="font-size:10px;font-weight:700;color:${c};text-transform:uppercase">${d}</span>`;
+    };
+
+    const mcapFmt = v => {
+      if (!v) return "—";
+      if (v >= 1e12) return `$${(v/1e12).toFixed(1)}T`;
+      if (v >= 1e9)  return `$${(v/1e9).toFixed(1)}B`;
+      if (v >= 1e6)  return `$${(v/1e6).toFixed(0)}M`;
+      return `$${v}`;
+    };
+
+    const scoreBar = (v, color) => {
+      const p = Math.round((v||0)*100);
+      return `<div style="display:flex;align-items:center;gap:4px;min-width:60px">
+        <div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+          <div style="height:100%;width:${p}%;background:${color};border-radius:2px"></div>
+        </div>
+        <span style="font-size:10px;color:var(--muted);width:26px;text-align:right">${p}%</span>
+      </div>`;
+    };
+
+    container.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th>Company</th>
+            <th>Sector</th>
+            <th>Market Cap</th>
+            <th>Score</th>
+            <th>Confidence</th>
+            <th>Mentions</th>
+            <th>Direction</th>
+            <th>Why</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map(r => `
+            <tr>
+              <td><strong>${r.ticker}</strong></td>
+              <td style="max-width:160px;font-size:11px">${r.company_name || "—"}</td>
+              <td style="font-size:10px;color:var(--muted)">${r.sector || "—"}</td>
+              <td style="font-size:11px;font-family:monospace">${mcapFmt(r.market_cap)}</td>
+              <td>${scoreBar(r.score, "var(--green)")}</td>
+              <td>${scoreBar(r.confidence, "var(--accent)")}</td>
+              <td style="text-align:center">
+                <span style="font-size:11px;color:var(--yellow);font-weight:700">${r.mentions}</span>
+              </td>
+              <td>${dirBadge(r.direction)}</td>
+              <td style="max-width:220px;font-size:10px;color:var(--muted);line-height:1.4">${r.reason}</td>
+            </tr>`).join("")}
+        </tbody>
+      </table>
+      <div style="padding:8px 14px;font-size:10px;color:var(--muted2);border-top:1px solid var(--border2)">
+        ${items.length} emerging candidate${items.length!==1?"s":""} found by scanning articles from the last ${hours}h.
+        These are <em>outside</em> the tracked 30-ticker universe. Validate independently before acting.
+        Cache refreshes every 5 min or on new ingestion.
+      </div>`;
+
+  } catch (err) {
+    container.innerHTML = `<div style="padding:16px;font-size:12px;color:var(--muted)">Could not load emerging picks: ${err.message}</div>`;
+  }
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────
+(async function init() {
+  loadDashboard();
+  loadSidebarAlerts();
+  // Load emerging picks alongside the dashboard (async, non-blocking)
+  loadEmergingPicks();
+  // Auto-refresh sidebar alerts every 5 minutes.
+  // Emerging picks refresh every 3 minutes to catch fresh news cycles.
+  // The dashboard and stock pages only refresh when you navigate to them
+  // or click the ↻ button — this prevents the terminal from being flooded
+  // with continuous polling output.
+  setInterval(() => { loadSidebarAlerts(); }, 300_000);
+  setInterval(() => { loadEmergingPicks(); }, 180_000);
+})();
+</script>
+</body>
+</html>
