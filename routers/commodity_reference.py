@@ -3,24 +3,25 @@ routers/commodity_reference.py
 -------------------------------
 AI commodity & natural-resource REFERENCE endpoints.
 
-Complements routers/commodities.py (the live signal/tracker engine): this router
-surfaces the sourced reference catalog — what to track, where the TRUE source
-is, how to query it (HS/HTS codes), why it matters for AI, plain-English
-explanations, provenance rules — plus best-effort live reference prices with
-explicit source attribution.
+Complements routers/commodities.py (the live signal/tracker engine). This router
+is the *sourcing layer*: what to track, where the TRUE source is, how to query
+it (HS/HTS codes), why it matters for AI, plain-English explanations, provenance
+rules, and best-effort live reference prices with explicit source attribution.
 
-Mounted under /commodity-reference to avoid colliding with the /commodities
-signal router's /{symbol} catch-all route.
+All routes live under /commodities/reference/* so the whole commodity surface
+shares one /commodities namespace. Every path is at least two segments deep, so
+it can never collide with the tracker router's /commodities/{symbol} route
+(regardless of include order).
 """
 
 from fastapi import APIRouter, HTTPException
 
-from services import commodities as cx
+from services import commodity_reference as cx
 
-router = APIRouter(prefix="/commodity-reference", tags=["Commodities"])
+router = APIRouter(prefix="/commodities/reference", tags=["Commodities"])
 
 
-@router.get("/", summary="List AI-relevant commodities (reference)")
+@router.get("/catalog", summary="List AI-relevant commodities (reference)")
 def list_commodities():
     """Catalog index: each commodity with its AI relevance, starter HS codes and
     authoritative sources."""
@@ -28,7 +29,7 @@ def list_commodities():
     return {"items": items, "count": len(items)}
 
 
-@router.get("/reference", summary="Sources, metric catalog and provenance rules")
+@router.get("/metrics", summary="Sources, metric catalog and provenance rules")
 def get_reference():
     """The full reference layer: official source map, metric catalog grouped by
     category, the minimum provenance fields to record, and the reliability note."""
@@ -51,7 +52,7 @@ def get_prices():
     return {"prices": prices, "count": len(prices), "reliability_note": cx.RELIABILITY_NOTE}
 
 
-@router.get("/{key}", summary="Commodity reference detail")
+@router.get("/item/{key}", summary="Commodity reference detail")
 def get_commodity(key: str):
     """Full detail for one commodity: AI relevance, plain-English explanation,
     every starter HS/HTS code (with where to confirm it), and the authoritative

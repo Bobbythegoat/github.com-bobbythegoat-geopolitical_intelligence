@@ -431,8 +431,8 @@ app.include_router(stocks.router)
 app.include_router(alerts.router)
 app.include_router(briefs.router)
 app.include_router(admin.router)
+app.include_router(commodity_reference.router)   # specific /commodities/reference/* first
 app.include_router(commodities.router)
-app.include_router(commodity_reference.router)
 
 
 # ---------------------------------------------------------------------------

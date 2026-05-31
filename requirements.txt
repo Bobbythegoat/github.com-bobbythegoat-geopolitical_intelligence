@@ -1,4 +1,8 @@
 fastapi==0.115.0
+# Pin Starlette explicitly: fastapi 0.115 requires <0.39, but a bare install can
+# pull a newer Starlette (1.0.0 removed the on_startup kwarg fastapi passes,
+# which crashes every APIRouter at import). Keep this in the fastapi-compatible range.
+starlette>=0.37.2,<0.39.0
 uvicorn[standard]==0.30.6
 sqlalchemy==2.0.35
 pydantic==2.9.2

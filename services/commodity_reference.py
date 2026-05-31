@@ -1,6 +1,6 @@
 """
-services/commodities.py
-------------------------
+services/commodity_reference.py
+--------------------------------
 AI-relevant commodity & natural-resource intelligence reference.
 
 This module encodes the reference sheet "AI Commodities & Natural Resource Trade

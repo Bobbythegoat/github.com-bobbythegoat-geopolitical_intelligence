@@ -2586,9 +2586,9 @@ async function loadCommodityReference() {
   if (!c) return;
   try {
     const [list, ref, prices] = await Promise.all([
-      api("/commodity-reference/"),
-      api("/commodity-reference/reference"),
-      api("/commodity-reference/prices").catch(() => ({prices: []})),
+      api("/commodities/reference/catalog"),
+      api("/commodities/reference/metrics"),
+      api("/commodities/reference/prices").catch(() => ({prices: []})),
     ]);
     const esc = s => (s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
     const groupColor = g => ({metal:"var(--accent)", mineral:"#d29922", energy:"var(--green)"}[g] || "var(--muted)");
@@ -2664,7 +2664,7 @@ async function loadCommodityRefDetail(key) {
   if (el.dataset.open === "1") { el.innerHTML = ""; el.dataset.open = "0"; return; }
   el.innerHTML = `<div class="loading" style="font-size:11px"><span class="spinner"></span>Loading…</div>`;
   try {
-    const d = await api("/commodity-reference/" + key);
+    const d = await api("/commodities/reference/item/" + key);
     const esc = s => (s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
     const codeRows = d.hs_codes.map(h => `
       <tr><td style="font-size:10px"><strong>${esc(h.form)}</strong></td>
