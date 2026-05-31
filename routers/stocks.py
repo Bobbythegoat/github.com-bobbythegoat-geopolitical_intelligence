@@ -139,6 +139,7 @@ def get_emerging_stocks(
     min_confidence: float = Query(0.45, ge=0.0, le=1.0, description="Min discovery confidence"),
     limit: int = Query(20, ge=1, le=50, description="Max results"),
     force_refresh: bool = Query(False, description="Bypass 5-min cache and re-scan"),
+    exclude_extended: bool = Query(False, description="Drop already-exploded (overextended) names"),
     session: Session = Depends(get_db),
 ):
     """
@@ -162,6 +163,7 @@ def get_emerging_stocks(
         min_confidence=min_confidence,
         limit=limit,
         force_refresh=force_refresh,
+        exclude_extended=exclude_extended,
     )
     return {"items": recs, "count": len(recs), "hours_scanned": hours}
 

@@ -99,6 +99,8 @@ def run_rescore_cycle() -> dict:
 
     try:
         from services.price_context import fetch_price_context
+        from services.price_positioning import classify as classify_positioning
+        from services.processing import compute_decision_bucket
         from services.learning import get_weights, get_current_regime
 
         tickers = session.query(db.Ticker).all()
@@ -117,8 +119,9 @@ def run_rescore_cycle() -> dict:
         for ticker_row in tickers:
             ticker_sym = ticker_row.ticker
             try:
-                # Fetch fresh price context
+                # Fetch fresh price context + derive price positioning
                 price_ctx = fetch_price_context(ticker_sym)
+                pos       = classify_positioning(price_ctx)
 
                 # Pull active EventTickerImpacts from last 7 days
                 impacts = (
@@ -139,30 +142,56 @@ def run_rescore_cycle() -> dict:
                 if event is None:
                     continue
 
-                # Clamp inputs to OpportunityFactors' declared bounds.
-                # momentum_30d is signed (can be negative) but price_reaction_lag
-                # requires [0,1]; rel_strength_90d can overshoot ±1 but
-                # asymmetry requires [-1,1]; vol_regime ratio can blow past 1.
-                _exposure  = min(max(abs(best_impact.impact_score or 0), 0.0), 1.0)
-                _cred      = min(max(event.credibility_score or 0.5,    0.0), 1.0)
-                _lag       = min(max(price_ctx.get("momentum_30d", 0.0), 0.0), 1.0)
-                _asym      = min(max(price_ctx.get("rel_strength_90d", 0.0), -1.0), 1.0)
-                _crowd     = min(max((event.source_count or 1) / 20.0,  0.0), 1.0)
-                _risk      = min(max(price_ctx.get("vol_regime", 1.0) / 5.0, 0.0), 1.0)
+                # ── Price-aware factors (fixes "already exploded" inflation) ──
+                # Previously price_reaction_lag = momentum_30d, which REWARDED
+                # stocks that had already run.  The underreaction edge is the
+                # opposite: a strong event on a name that has NOT yet moved.
+                # All values below are already within OpportunityFactors' bounds.
+                extension = pos["extension_score"]      # 0–1, how much it already ran
+                freshness = pos["freshness_score"]      # 0–1, room left to run
+
+                _exposure = min(max(abs(best_impact.impact_score or 0), 0.0), 1.0)
+                _cred     = min(max(event.credibility_score or 0.5,    0.0), 1.0)
+
+                # News crowding (everyone is writing about it) OR price crowding
+                # (the move already happened) — take the worse of the two so an
+                # exploded name can never look "early".
+                news_crowd = min(max((event.source_count or 1) / 20.0, 0.0), 1.0)
+                crowding   = max(news_crowd, extension)
+
+                # Asymmetry: fresh names (room to run) have positive asymmetry;
+                # overextended names at the highs have negative asymmetry.
+                asymmetry  = round(1.0 - 2.0 * extension, 4)   # [-1, 1]
+
+                # Risk blends volatility regime with how stretched the name is.
+                vol_risk   = (price_ctx.get("vol_regime", 1.0) or 1.0) / 5.0
+                risk       = max(0.0, min(1.0, 0.6 * vol_risk + 0.4 * extension))
 
                 factors = OpportunityFactors(
                     exposure=_exposure,
                     credibility=_cred,
                     expectation_gap=0.0,          # neutral default
                     indirect_impact=0.0,
-                    price_reaction_lag=_lag,       # underreaction proxy
-                    asymmetry=_asym,
-                    crowding=_crowd,
-                    risk=_risk,
+                    price_reaction_lag=freshness,   # underreaction proxy: not-yet-moved
+                    asymmetry=asymmetry,
+                    crowding=crowding,
+                    risk=risk,
                     narrative_stage=event.narrative_stage or "peak",
                 )
 
                 opp_score = calculate_opportunity(factors, weights=weights)
+
+                # Decision bucket reacts to price extension: an overextended name
+                # (crowding ≥ 0.72) is bucketed "Avoid - Crowded" even if the
+                # news narrative still looks early.
+                bucket = compute_decision_bucket(
+                    opportunity_score=opp_score,
+                    crowding_score=crowding,
+                    risk_score=risk,
+                    lag_score=freshness,
+                    narrative_stage=event.narrative_stage or "peak",
+                    credibility=_cred,
+                )
 
                 # Upsert StockScore row
                 score_row = session.query(db.StockScore).filter_by(ticker=ticker_sym).first()
@@ -172,11 +201,12 @@ def run_rescore_cycle() -> dict:
 
                 score_row.opportunity_score = opp_score
                 score_row.exposure_score    = factors.exposure
-                score_row.crowding_score    = factors.crowding
-                score_row.risk_score        = factors.risk
-                score_row.lag_score         = max(0.0, min(1.0, factors.price_reaction_lag))
-                score_row.asymmetry_score   = (factors.asymmetry + 1.0) / 2.0
+                score_row.crowding_score    = round(crowding, 4)
+                score_row.risk_score        = round(risk, 4)
+                score_row.lag_score         = round(max(0.0, min(1.0, freshness)), 4)
+                score_row.asymmetry_score   = round((asymmetry + 1.0) / 2.0, 4)
                 score_row.impact_score      = abs(best_impact.impact_score or 0)
+                score_row.decision_bucket   = bucket
                 score_row.updated_at        = datetime.now(timezone.utc)
 
                 tickers_scored += 1

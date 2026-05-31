@@ -577,6 +577,10 @@ def compute_decision_bucket(
     # Guard: insufficient signal — don't assign actionable bucket regardless of stage
     if opportunity_score < 0.10:
         return "Watch"
+    # Price/attention extension guard: a heavily-crowded or already-exploded name
+    # is never an "early" opportunity, regardless of how fresh the news looks.
+    if crowding_score >= 0.72:
+        return "Avoid - Crowded"
     if narrative_stage == "declining" and opportunity_score >= 0.10 and opportunity_score < 0.3:
         return "Exit Window Approaching"
     if crowding_score >= 0.60 and narrative_stage in ("peak", "declining"):

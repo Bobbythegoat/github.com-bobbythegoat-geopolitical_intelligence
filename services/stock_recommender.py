@@ -68,6 +68,7 @@ def get_emerging_recommendations(
     min_confidence: float = MIN_SHOW_CONFIDENCE,
     limit: int = MAX_RESULTS,
     force_refresh: bool = False,
+    exclude_extended: bool = False,
 ) -> List[Dict]:
     """
     Scan recent articles for stock mentions and return scored recommendations.
@@ -90,7 +91,7 @@ def get_emerging_recommendations(
 
     if not force_refresh and _is_cache_valid(hours):
         cached = _cache["results"]
-        return [r for r in cached if r["confidence"] >= min_confidence][:limit]
+        return _apply_filters(cached, min_confidence, exclude_extended, limit)
 
     since = datetime.utcnow() - timedelta(hours=hours)
 
@@ -232,13 +233,34 @@ def get_emerging_recommendations(
         avg_cred        = data["total_credibility"] / max(mentions_count, 1)
         mention_norm    = min(mentions_count / 10.0, 1.0)
         avg_impact_abs  = abs(data["total_impact"]) / max(mentions_count, 1)
-        composite_score = round(
+        base_score = (
             avg_cred       * 0.40
             + mention_norm * 0.30
             + confidence   * 0.20
-            + avg_impact_abs * 0.10,
-            4,
+            + avg_impact_abs * 0.10
         )
+
+        # ── Price positioning: down-rank names that already exploded ──────────
+        # The news signal can be identical for a fresh name and one that already
+        # ran 40% — but the fresh-entry asymmetry is not.  We fetch live price
+        # context, classify how extended the stock is, and apply a penalty so
+        # already-moved names sink in the ranking.  We do NOT hide them: the
+        # label + the underlying numbers travel with the row so the user can
+        # make their own call and research further.
+        try:
+            from services.price_positioning import classify, status_label
+            from services.price_context import fetch_price_context
+            pos = classify(fetch_price_context(ticker))
+        except Exception:
+            pos = {
+                "extension_score": 0.0, "freshness_score": 1.0,
+                "price_status": "unknown", "is_extended": False,
+                "penalty_mult": 1.0, "rsi_14": None,
+                "pct_from_52w_high": None, "momentum_30d": None,
+                "note": "Price data unavailable — positioning not assessed.",
+            }
+
+        composite_score = round(base_score * pos.get("penalty_mult", 1.0), 4)
 
         # ── Direction label ───────────────────────────────────────────────────
         valid_dirs = [d for d in data["directions"] if d is not None]
@@ -269,11 +291,22 @@ def get_emerging_recommendations(
             "sector":        validated["sector"],
             "market_cap":    validated["market_cap"],
             "score":         composite_score,
+            "base_score":    round(base_score, 4),   # before price-extension penalty
             "confidence":    round(confidence, 4),
             "mentions":      mentions_count,
             "event_ids":     sorted(data["events"]),
             "reason":        reason,
             "direction":     direction,
+            # ── Price positioning (issue #1: avoid already-exploded names) ────
+            "price_status":      pos.get("price_status", "unknown"),
+            "price_status_label": status_label(pos["price_status"]) if pos.get("price_status") and pos.get("price_status") != "unknown" else "Not assessed",
+            "extension_score":   pos.get("extension_score"),
+            "freshness_score":   pos.get("freshness_score"),
+            "is_extended":       pos.get("is_extended", False),
+            "rsi_14":            pos.get("rsi_14"),
+            "pct_from_52w_high": pos.get("pct_from_52w_high"),
+            "momentum_30d":      pos.get("momentum_30d"),
+            "entry_note":        pos.get("note", ""),
             "discovered_at": datetime.utcnow().isoformat(),
         })
 
@@ -290,4 +323,20 @@ def get_emerging_recommendations(
         "Stock recommender: scanned %d articles, validated %d candidates, returning %d results",
         len(articles), validated_count, len(results),
     )
-    return results[:limit]
+    return _apply_filters(results, min_confidence, exclude_extended, limit)
+
+
+def _apply_filters(
+    rows: List[Dict],
+    min_confidence: float,
+    exclude_extended: bool,
+    limit: int,
+) -> List[Dict]:
+    """Filter cached/fresh recommendation rows by confidence and (optionally)
+    drop overextended names, preserving the score-descending order."""
+    out = [r for r in rows if r.get("confidence", 0) >= min_confidence]
+    if exclude_extended:
+        # Only drop the clearly already-exploded names (overextended); keep the
+        # merely 'extended' ones visible-but-labelled.
+        out = [r for r in out if r.get("price_status") != "overextended"]
+    return out[:limit]

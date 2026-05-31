@@ -44,7 +44,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 
 from database import create_tables
-from routers import events, stocks, alerts, briefs, admin, commodities
+from routers import events, stocks, alerts, briefs, admin, commodities, commodity_reference
 
 # Global lock prevents concurrent ingestion cycles (scheduler + manual refresh)
 _INGEST_LOCK = threading.Lock()
@@ -432,6 +432,7 @@ app.include_router(alerts.router)
 app.include_router(briefs.router)
 app.include_router(admin.router)
 app.include_router(commodities.router)
+app.include_router(commodity_reference.router)
 
 
 # ---------------------------------------------------------------------------

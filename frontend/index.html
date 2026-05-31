@@ -1128,6 +1128,14 @@
             <div style="color:var(--muted2); font-size:12px">Click a commodity in the heatmap to load its recent signals and exposed downstream tickers.</div>
           </div>
         </div>
+
+        <!-- Reference & sourcing layer: HS codes, true sources, how-to-track, explanations -->
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-header"><h3>Reference &amp; Sourcing — where the data truly comes from</h3></div>
+          <div class="card-body" id="cm-reference-body">
+            <div style="color:var(--muted2); font-size:12px"><span class="spinner"></span> Loading reference catalog…</div>
+          </div>
+        </div>
       </div>
 
       <div class="page" id="page-feedback">
@@ -2566,6 +2574,117 @@ async function loadCommodities() {
       Error loading commodities: ${e.message}</td></tr>`;
     status.textContent = "Error";
   }
+
+  // Load the reference/sourcing layer once (HS codes, true sources, explanations).
+  if (!window._cmRefLoaded) { window._cmRefLoaded = true; loadCommodityReference(); }
+}
+
+// Reference & sourcing layer (issue #2): HS codes, authoritative sources,
+// metric catalog, provenance and best-effort live prices — all provenance-tagged.
+async function loadCommodityReference() {
+  const c = document.getElementById("cm-reference-body");
+  if (!c) return;
+  try {
+    const [list, ref, prices] = await Promise.all([
+      api("/commodity-reference/"),
+      api("/commodity-reference/reference"),
+      api("/commodity-reference/prices").catch(() => ({prices: []})),
+    ]);
+    const esc = s => (s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    const groupColor = g => ({metal:"var(--accent)", mineral:"#d29922", energy:"var(--green)"}[g] || "var(--muted)");
+
+    const priceRows = (prices.prices || []).map(p => `
+      <tr>
+        <td><strong>${esc(p.name)}</strong></td>
+        <td style="font-family:monospace">${p.price != null ? p.price : "—"}</td>
+        <td style="font-size:10px;color:var(--muted)">${esc(p.unit)}</td>
+        <td style="font-family:monospace;color:${(p.change_pct||0)>=0?"var(--green)":"#f85149"}">${p.change_pct!=null?(p.change_pct>=0?"+":"")+p.change_pct+"%":"—"}</td>
+        <td style="font-size:10px"><a href="${p.true_source_url}" target="_blank" style="color:var(--accent)">${esc(p.true_source)}</a></td>
+        <td style="font-size:10px;color:var(--muted)">verify vs <a href="${p.verify_url}" target="_blank" style="color:var(--muted)">${esc(p.verify_against)}</a></td>
+      </tr>`).join("");
+    const pricesBlock = priceRows ? `
+      <h4 style="margin:4px 0 6px;font-size:12px">Live reference prices <span style="font-size:10px;color:var(--muted2)">(delayed / indicative)</span></h4>
+      <table><thead><tr><th>Commodity</th><th>Price</th><th>Unit</th><th>Δ</th><th>True source</th><th>Verify against</th></tr></thead>
+      <tbody>${priceRows}</tbody></table>` : "";
+
+    const cards = (list.items || []).map(it => `
+      <div style="border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <strong style="font-size:12px">${esc(it.name)}</strong>
+          <span style="font-size:9px;font-weight:700;text-transform:uppercase;color:${groupColor(it.group)};border:1px solid ${groupColor(it.group)};border-radius:3px;padding:1px 5px">${esc(it.group)}</span>
+          ${it.has_live_price ? `<span style="font-size:9px;color:var(--green)">● live price</span>` : ""}
+          <button class="secondary" style="margin-left:auto;font-size:10px;padding:2px 8px" onclick="loadCommodityRefDetail('${it.key}')">Details ▾</button>
+        </div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:6px">${esc(it.why_ai)}</div>
+        <div style="font-size:10px;color:var(--muted2)">
+          <strong>HS codes:</strong> ${it.hs_codes.map(esc).join(" · ")}<br>
+          <strong>Sources:</strong> ${it.primary_sources.map(esc).join(" · ")}
+        </div>
+        <div id="cmref-${it.key}" style="margin-top:8px"></div>
+      </div>`).join("");
+
+    const metricBlocks = (ref.metric_categories || []).map(cat => `
+      <div style="margin-bottom:10px">
+        <h4 style="margin:4px 0;font-size:12px">${esc(cat.category)}</h4>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:6px;line-height:1.5">${esc(cat.intro)}</div>
+        <table><thead><tr><th>Metric</th><th>What to track</th><th>How to track it</th></tr></thead>
+        <tbody>${cat.metrics.map(m => `
+          <tr><td style="font-size:11px"><strong>${esc(m.metric)}</strong></td>
+          <td style="font-size:10px;color:var(--muted);max-width:240px">${esc(m.what)}</td>
+          <td style="font-size:10px;color:var(--muted);max-width:280px">${esc(m.how)}</td></tr>`).join("")}</tbody></table>
+      </div>`).join("");
+
+    const sourceRows = (ref.source_map || []).map(s => `
+      <tr><td style="font-size:11px"><a href="${s.url}" target="_blank" style="color:var(--accent)"><strong>${esc(s.name)}</strong></a></td>
+      <td style="font-size:9px;color:var(--muted2);text-transform:uppercase">${esc(s.tier)}</td>
+      <td style="font-size:10px;color:var(--muted);max-width:320px">${esc(s.what_it_gives)}</td></tr>`).join("");
+
+    const provRows = (ref.provenance_fields || []).map(p => `
+      <tr><td style="font-size:11px"><strong>${esc(p.field)}</strong></td>
+      <td style="font-size:10px;color:var(--muted)">${esc(p.why)}</td></tr>`).join("");
+
+    c.innerHTML = `
+      <div style="font-size:10px;color:var(--muted);margin-bottom:10px;line-height:1.5">${esc(ref.reliability_note)}</div>
+      ${pricesBlock}
+      <h4 style="margin:12px 0 6px;font-size:12px">AI-relevant commodities (${(list.items||[]).length}) — codes, sources &amp; explanations</h4>
+      ${cards}
+      <details style="margin-top:10px"><summary style="cursor:pointer;font-size:12px;color:var(--accent);padding:6px 0">▸ Metric catalog — what to track &amp; how (5 categories)</summary>${metricBlocks}</details>
+      <details style="margin-top:6px"><summary style="cursor:pointer;font-size:12px;color:var(--accent);padding:6px 0">▸ Official source map (true sources)</summary>
+        <table><thead><tr><th>Source</th><th>Tier</th><th>What it gives you</th></tr></thead><tbody>${sourceRows}</tbody></table></details>
+      <details style="margin-top:6px"><summary style="cursor:pointer;font-size:12px;color:var(--accent);padding:6px 0">▸ Provenance — record these fields every time</summary>
+        <table><thead><tr><th>Field</th><th>Why it matters</th></tr></thead><tbody>${provRows}</tbody></table></details>`;
+  } catch (err) {
+    c.innerHTML = `<div style="font-size:12px;color:var(--muted)">Could not load reference catalog: ${err.message}</div>`;
+  }
+}
+
+async function loadCommodityRefDetail(key) {
+  const el = document.getElementById("cmref-" + key);
+  if (!el) return;
+  if (el.dataset.open === "1") { el.innerHTML = ""; el.dataset.open = "0"; return; }
+  el.innerHTML = `<div class="loading" style="font-size:11px"><span class="spinner"></span>Loading…</div>`;
+  try {
+    const d = await api("/commodity-reference/" + key);
+    const esc = s => (s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    const codeRows = d.hs_codes.map(h => `
+      <tr><td style="font-size:10px"><strong>${esc(h.form)}</strong></td>
+      <td style="font-family:monospace;font-size:10px">${esc(h.code)}</td>
+      <td style="font-size:10px;color:var(--muted)">${esc(h.note)}</td></tr>`).join("");
+    const srcRows = (d.sources||[]).map(s => `
+      <li style="font-size:10px;margin-bottom:3px"><a href="${s.url}" target="_blank" style="color:var(--accent)">${esc(s.name)}</a>
+      <span style="color:var(--muted)">— ${esc(s.use_for)}</span></li>`).join("");
+    el.innerHTML = `
+      <div style="border-top:1px solid var(--border);padding-top:8px">
+        <div style="font-size:11px;color:var(--text);line-height:1.5;margin-bottom:8px"><strong>How to read it:</strong> ${esc(d.explanation)}</div>
+        <strong style="font-size:10px;color:var(--muted2)">STARTER HS/HTS CODES (confirm exact form first)</strong>
+        <table style="margin:4px 0 8px"><thead><tr><th>Form</th><th>Code</th><th>Note</th></tr></thead><tbody>${codeRows}</tbody></table>
+        <strong style="font-size:10px;color:var(--muted2)">AUTHORITATIVE SOURCES</strong>
+        <ul style="margin:4px 0 0;padding-left:16px">${srcRows}</ul>
+      </div>`;
+    el.dataset.open = "1";
+  } catch (err) {
+    el.innerHTML = `<div style="font-size:11px;color:var(--muted)">Could not load detail: ${err.message}</div>`;
+  }
 }
 
 async function showCommodityDetail(symbol) {
@@ -2796,6 +2915,21 @@ async function loadEmergingPicks(forceRefresh = false) {
       return `<span style="font-size:10px;font-weight:700;color:${c};text-transform:uppercase">${d}</span>`;
     };
 
+    // Entry-timing badge: the issue #1 fix — flags names that already exploded.
+    const entryBadge = r => {
+      const map = {
+        fresh:        {c:"var(--green)",  t:"FRESH"},
+        early_move:   {c:"var(--yellow)", t:"EARLY MOVE"},
+        extended:     {c:"#d29922",       t:"EXTENDED"},
+        overextended: {c:"var(--red)",    t:"OVEREXTENDED"},
+        pulled_back:  {c:"var(--accent)", t:"PULLED BACK"},
+      };
+      const m = map[r.price_status] || {c:"var(--muted)", t:"N/A"};
+      const ext = r.extension_score != null ? ` ${Math.round(r.extension_score*100)}%` : "";
+      const tip = (r.entry_note || "").replace(/"/g, "&quot;");
+      return `<span title="${tip}" style="font-size:9px;font-weight:700;color:${m.c};border:1px solid ${m.c};border-radius:3px;padding:1px 5px;white-space:nowrap">${m.t}${ext}</span>`;
+    };
+
     const mcapFmt = v => {
       if (!v) return "—";
       if (v >= 1e12) return `$${(v/1e12).toFixed(1)}T`;
@@ -2826,6 +2960,7 @@ async function loadEmergingPicks(forceRefresh = false) {
             <th>Confidence</th>
             <th>Mentions</th>
             <th>Direction</th>
+            <th>Entry timing</th>
             <th>Why</th>
           </tr>
         </thead>
@@ -2842,6 +2977,7 @@ async function loadEmergingPicks(forceRefresh = false) {
                 <span style="font-size:11px;color:var(--yellow);font-weight:700">${r.mentions}</span>
               </td>
               <td>${dirBadge(r.direction)}</td>
+              <td>${entryBadge(r)}</td>
               <td style="max-width:220px;font-size:10px;color:var(--muted);line-height:1.4">${r.reason}</td>
             </tr>`).join("")}
         </tbody>
@@ -2849,7 +2985,12 @@ async function loadEmergingPicks(forceRefresh = false) {
       <div style="padding:8px 14px;font-size:10px;color:var(--muted2);border-top:1px solid var(--border2)">
         ${items.length} emerging candidate${items.length!==1?"s":""} found by scanning articles from the last ${hours}h.
         These are <em>outside</em> the tracked 30-ticker universe. Validate independently before acting.
-        Cache refreshes every 5 min or on new ingestion.
+        Cache refreshes every 5 min or on new ingestion.<br>
+        <strong>Entry timing</strong> flags names that already ran (RSI, % from 52-week high, 30-day move):
+        <span style="color:var(--green)">FRESH</span> = hasn't moved ·
+        <span style="color:#d29922">EXTENDED</span> = already ran ·
+        <span style="color:var(--red)">OVEREXTENDED</span> = likely priced in (score is penalised).
+        Hover a badge for the numbers.
       </div>`;
 
   } catch (err) {
