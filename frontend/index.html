@@ -15,7 +15,7 @@
       --text:      #e6edf3;
       --muted:     #8b949e;
       --muted2:    #6e7681;
-      --accent:    #388bfd;
+      --accent:    #58a6ff;
       --green:     #3fb950;
       --yellow:    #d29922;
       --orange:    #e3812a;
@@ -25,7 +25,7 @@
 
       --tier-critical: #f85149;
       --tier-high:     #d29922;
-      --tier-monitor:  #388bfd;
+      --tier-monitor:  #58a6ff;
 
       --stage-emerging:   #3fb950;
       --stage-developing: #d29922;
@@ -33,7 +33,7 @@
       --stage-declining:  #8b949e;
 
       --bucket-early:    #3fb950;
-      --bucket-research: #388bfd;
+      --bucket-research: #58a6ff;
       --bucket-watch:    #8b949e;
       --bucket-wait:     #d29922;
       --bucket-avoid:    #f85149;
@@ -42,7 +42,7 @@
 
       --type-geopolitical: #f85149;
       --type-macro:        #d29922;
-      --type-company:      #388bfd;
+      --type-company:      #58a6ff;
       --type-sector:       #3fb950;
     }
 
@@ -54,7 +54,7 @@
       flex-direction: column;
       height: 100vh;
       overflow: hidden;
-      font-size: 13px;
+      font-size: 14px;
     }
 
     /* ─── TOP BAR ─────────────────────────────────────────────────────── */
@@ -126,8 +126,8 @@
 
     /* ─── SIDEBAR ─────────────────────────────────────────────────────── */
     #sidebar {
-      width: 200px;
-      min-width: 200px;
+      width: 220px;
+      min-width: 220px;
       background: var(--surface);
       border-right: 1px solid var(--border);
       display: flex;
@@ -139,7 +139,7 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 8px 14px;
+      padding: 10px 16px;
       color: var(--muted);
       text-decoration: none;
       font-size: 12px;
@@ -147,15 +147,15 @@
       transition: all .12s;
     }
     #sidebar nav a:hover   { color: var(--text); background: rgba(255,255,255,.03); }
-    #sidebar nav a.active  { color: var(--text); border-left-color: var(--accent); background: rgba(56,139,253,.08); }
+    #sidebar nav a.active  { color: var(--text); border-left-color: var(--accent); background: rgba(88,166,255,.08); }
     #sidebar nav a .icon   { font-size: 14px; width: 18px; text-align: center; }
     #sidebar nav a .badge  {
       margin-left: auto;
       background: var(--red);
       color: #fff;
-      font-size: 9px;
+      font-size: 11px;
       border-radius: 8px;
-      padding: 1px 5px;
+      padding: 2px 8px;
       font-weight: 700;
     }
 
@@ -165,7 +165,7 @@
       padding: 8px 0;
     }
     #sidebar-live .section-label {
-      font-size: 9px;
+      font-size: 11px;
       text-transform: uppercase;
       letter-spacing: .7px;
       color: var(--muted2);
@@ -174,13 +174,13 @@
     }
     .live-alert-card {
       padding: 7px 14px;
-      border-left: 3px solid transparent;
+      border-left: 4px solid transparent;
       cursor: pointer;
       transition: background .1s;
     }
-    .live-alert-card:hover { background: rgba(255,255,255,.03); }
+    .live-alert-card:hover { background: rgba(255,255,255,.045); }
     .live-alert-card .lat { font-size: 10px; font-weight: 700; }
-    .live-alert-card .ltt { font-size: 11px; color: var(--text); line-height: 1.3; margin-top: 2px; }
+    .live-alert-card .ltt { font-size: 13px; color: var(--text); line-height: 1.35; margin-top: 3px; }
     .live-alert-card .lts { font-size: 10px; color: var(--muted); margin-top: 2px; }
     .live-alert-card.Critical { border-left-color: var(--tier-critical); }
     .live-alert-card.High     { border-left-color: var(--tier-high); }
@@ -234,7 +234,7 @@
     .filter-bar input { min-width: 140px; }
     .filter-bar input::placeholder { color: var(--muted2); }
     .filter-label {
-      font-size: 10px;
+      font-size: 11px;
       color: var(--muted);
       text-transform: uppercase;
       letter-spacing: .5px;
@@ -244,17 +244,22 @@
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 10px;
+      gap: 14px;
       margin-bottom: 18px;
     }
     .stat-card {
       background: var(--surface);
       border: 1px solid var(--border);
+      border-top: 3px solid var(--accent);
       border-radius: 8px;
-      padding: 14px 16px;
+      padding: 18px 20px;
+      transition: background .12s;
     }
-    .stat-card .label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
-    .stat-card .value { font-size: 26px; font-weight: 700; margin-top: 3px; }
+    .stat-card:hover { background: var(--surface2); }
+    .stat-card:has(.value[style*="--green"]) { border-top-color: var(--green); }
+    .stat-card:has(.value[style*="--teal"]) { border-top-color: var(--green); }
+    .stat-card .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+    .stat-card .value { font-size: 28px; font-weight: 700; margin-top: 3px; }
     .stat-card .sub   { font-size: 10px; color: var(--muted); margin-top: 3px; }
 
     .card {
@@ -263,46 +268,55 @@
       border-radius: 8px;
       margin-bottom: 12px;
       overflow: hidden;
+      transition: background .12s;
     }
+    .card:hover { background: var(--surface2); }
     .card-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 10px 14px;
+      padding: 12px 20px;
       border-bottom: 1px solid var(--border);
     }
-    .card-header h3 { font-size: 12px; font-weight: 600; }
-    .card-body { padding: 14px; }
+    .card-header h3 { font-size: 13px; font-weight: 600; }
+    .card-body { padding: 18px 20px; }
 
     /* ─── TABLES ──────────────────────────────────────────────────────── */
-    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th {
       text-align: left;
-      padding: 7px 10px;
-      font-size: 10px;
+      padding: 11px 12px;
+      font-size: 11px;
+      font-weight: 600;
       text-transform: uppercase;
       letter-spacing: .5px;
       color: var(--muted);
       border-bottom: 1px solid var(--border);
       white-space: nowrap;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: var(--surface);
     }
-    td { padding: 9px 10px; border-bottom: 1px solid rgba(48,54,61,.4); vertical-align: middle; }
+    td { padding: 11px 12px; border-bottom: 1px solid rgba(48,54,61,.4); vertical-align: middle; }
+    tbody tr:nth-child(even) td { background: rgba(255,255,255,.015); }
     tr:last-child td { border-bottom: none; }
     tr.clickable:hover td { background: rgba(255,255,255,.025); cursor: pointer; }
 
     /* ─── BADGES ──────────────────────────────────────────────────────── */
     .badge {
       display: inline-block;
-      padding: 1px 7px;
+      padding: 2px 8px;
       border-radius: 10px;
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 700;
       text-transform: uppercase;
       white-space: nowrap;
     }
+    .badge[style*="font-size"] { font-size: 11px !important; }
     .tier-Critical { background: rgba(248,81,73,.18); color: var(--tier-critical); }
     .tier-High     { background: rgba(210,153,34,.18); color: var(--tier-high); }
-    .tier-Monitor  { background: rgba(56,139,253,.18); color: var(--tier-monitor); }
+    .tier-Monitor  { background: rgba(88,166,255,.18); color: var(--tier-monitor); }
 
     .stage-emerging   { background: rgba(63,185,80,.14); color: var(--stage-emerging); }
     .stage-developing { background: rgba(210,153,34,.14); color: var(--stage-developing); }
@@ -311,11 +325,11 @@
 
     .type-geopolitical { background: rgba(248,81,73,.14); color: var(--type-geopolitical); }
     .type-macro        { background: rgba(210,153,34,.14); color: var(--type-macro); }
-    .type-company      { background: rgba(56,139,253,.14); color: var(--type-company); }
+    .type-company      { background: rgba(88,166,255,.14); color: var(--type-company); }
     .type-sector       { background: rgba(63,185,80,.14); color: var(--type-sector); }
 
     .bucket-early    { background: rgba(63,185,80,.14); color: var(--bucket-early); }
-    .bucket-research { background: rgba(56,139,253,.14); color: var(--bucket-research); }
+    .bucket-research { background: rgba(88,166,255,.14); color: var(--bucket-research); }
     .bucket-watch    { background: rgba(139,148,158,.14); color: var(--bucket-watch); }
     .bucket-wait     { background: rgba(210,153,34,.14); color: var(--bucket-wait); }
     .bucket-avoid    { background: rgba(248,81,73,.14); color: var(--bucket-avoid); }
@@ -408,7 +422,7 @@
     /* ─── EVENT DETAIL ────────────────────────────────────────────────── */
     .detail-section { margin-bottom: 22px; }
     .detail-section h4 {
-      font-size: 10px;
+      font-size: 11px;
       text-transform: uppercase;
       letter-spacing: .6px;
       color: var(--muted);
@@ -428,7 +442,7 @@
       padding: 10px;
     }
     .confirmed-box .cb-label {
-      font-size: 9px;
+      font-size: 11px;
       text-transform: uppercase;
       letter-spacing: .5px;
       font-weight: 700;
@@ -445,7 +459,9 @@
       border-radius: 6px;
       margin-bottom: 8px;
       font-size: 11px;
+      transition: background .12s;
     }
+    .article-card:hover { background: rgba(255,255,255,.025); }
     .article-card .ac-src { font-size: 10px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
     .article-card .ac-headline { font-weight: 600; margin-bottom: 4px; line-height: 1.4; }
     .article-card .ac-meta { color: var(--muted); font-size: 10px; }
@@ -463,7 +479,7 @@
     }
     .impact-pos { background: rgba(63,185,80,.14); color: var(--green); }
     .impact-neg { background: rgba(248,81,73,.14); color: var(--red); }
-    .impact-neu { background: rgba(56,139,253,.14); color: var(--accent); }
+    .impact-neu { background: rgba(88,166,255,.14); color: var(--accent); }
 
     /* ─── STOCK DETAIL PANEL ─────────────────────────────────────────── */
     .thesis-grid {
@@ -477,7 +493,7 @@
       border-radius: 6px;
       padding: 10px;
     }
-    .thesis-box .tb-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+    .thesis-box .tb-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
     .thesis-box.bull .tb-label { color: var(--green); }
     .thesis-box.bear .tb-label { color: var(--red); }
     .thesis-box.neut .tb-label { color: var(--muted); }
@@ -495,7 +511,7 @@
       border-radius: 6px;
       padding: 9px 10px;
     }
-    .score-tile .st-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+    .score-tile .st-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
     .score-tile .st-val { font-size: 18px; font-weight: 700; margin: 3px 0; }
     .score-tile .st-bar .track { width: 100%; height: 4px; background: var(--border); border-radius: 2px; margin-top: 3px; }
     .score-tile .st-bar .fill { height: 100%; border-radius: 2px; }
@@ -512,7 +528,7 @@
       border-radius: 6px;
       padding: 9px 10px;
     }
-    .fund-tile .ft-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+    .fund-tile .ft-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
     .fund-tile .ft-val { font-size: 15px; font-weight: 700; margin-top: 3px; }
 
     /* ─── DAILY BRIEF ─────────────────────────────────────────────────── */
@@ -535,28 +551,30 @@
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 14px 16px;
+      padding: 18px 20px;
       margin-bottom: 10px;
+      transition: background .12s;
     }
+    .narrative-card:hover { background: var(--surface2); }
     .narrative-card .nc-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
     .narrative-card h4 { font-size: 13px; font-weight: 600; }
     .narrative-card .nc-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
     .narrative-card .nc-desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
     .narrative-card .nc-stocks { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
     .stock-chip {
-      font-size: 10px;
+      font-size: 13px;
       font-weight: 700;
       padding: 2px 6px;
       border-radius: 4px;
-      background: rgba(56,139,253,.14);
+      background: rgba(88,166,255,.14);
       color: var(--accent);
       cursor: pointer;
     }
-    .stock-chip:hover { background: rgba(56,139,253,.25); }
+    .stock-chip:hover { background: rgba(88,166,255,.25); }
 
     /* ─── FEEDBACK ────────────────────────────────────────────────────── */
     .feedback-form { display: flex; flex-direction: column; gap: 10px; }
-    .feedback-form label { font-size: 10px; color: var(--muted); text-transform: uppercase; }
+    .feedback-form label { font-size: 11px; color: var(--muted); text-transform: uppercase; }
     .feedback-form input,
     .feedback-form textarea,
     .feedback-form select {
@@ -699,6 +717,7 @@
       <a href="#" data-page="stocks"><span class="icon">◷</span> Stocks</a>
       <a href="#" data-page="narratives"><span class="icon">⬡</span> Narratives</a>
       <a href="#" data-page="brief"><span class="icon">◻</span> Daily Brief</a>
+      <a href="#" data-page="commodities"><span class="icon">◆</span> Commodities</a>
       <a href="#" data-page="alerts" id="nav-alerts">
         <span class="icon">◈</span> Alerts
         <span class="badge" id="alert-badge" style="display:none">0</span>
@@ -1053,6 +1072,64 @@
       <!-- ======================================================= -->
       <!-- FEEDBACK -->
       <!-- ======================================================= -->
+      <!-- ======================================================= -->
+      <!-- COMMODITIES -->
+      <!-- ======================================================= -->
+      <div class="page" id="page-commodities">
+        <div style="display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap">
+          <label style="font-size:11px; color:var(--muted2)">Tier:</label>
+          <select id="cm-tier" onchange="loadCommodities()" style="background:var(--bg-elev); color:var(--text); border:1px solid var(--border); padding:4px 6px; border-radius:4px">
+            <option value="">All</option>
+            <option value="1">Tier 1 — Liquid (Cu, NatGas, U, Al, Li, Ni)</option>
+            <option value="2">Tier 2 — Choke points (Ga, Ge, In, REE, Graphite)</option>
+            <option value="3">Tier 3 — Semi bottlenecks (Ne, Ar, Kr, Xe, resist…)</option>
+          </select>
+          <label style="font-size:11px; color:var(--muted2); margin-left:10px">Window:</label>
+          <select id="cm-hours" onchange="loadCommodities()" style="background:var(--bg-elev); color:var(--text); border:1px solid var(--border); padding:4px 6px; border-radius:4px">
+            <option value="24">24h</option>
+            <option value="72" selected>72h</option>
+            <option value="168">7d</option>
+            <option value="720">30d</option>
+          </select>
+          <button class="secondary" onclick="loadCommodities()" style="font-size:10px;padding:3px 8px">↻ Refresh</button>
+          <span id="cm-status" style="font-size:11px; color:var(--muted2); margin-left:auto"></span>
+        </div>
+
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-header"><h3>Commodity Heatmap — Recent Signal Activity</h3></div>
+          <div class="card-body">
+            <table id="cm-heatmap-table">
+              <thead>
+                <tr>
+                  <th>Tier</th>
+                  <th>Symbol</th>
+                  <th>Name</th>
+                  <th>Category</th>
+                  <th>Proxy</th>
+                  <th style="text-align:right">Supplier&nbsp;HHI</th>
+                  <th style="text-align:right">Policy&nbsp;Sens.</th>
+                  <th style="text-align:right">AI&nbsp;Link</th>
+                  <th style="text-align:right">Net&nbsp;Signal</th>
+                  <th style="text-align:right">Max&nbsp;Sev.</th>
+                  <th style="text-align:right">#&nbsp;Sig</th>
+                  <th>Top Signal</th>
+                </tr>
+              </thead>
+              <tbody id="cm-heatmap-body">
+                <tr><td colspan="12" style="text-align:center; color:var(--muted2)">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-header"><h3 id="cm-detail-title">Commodity Detail — select a row above</h3></div>
+          <div class="card-body" id="cm-detail-body">
+            <div style="color:var(--muted2); font-size:12px">Click a commodity in the heatmap to load its recent signals and exposed downstream tickers.</div>
+          </div>
+        </div>
+      </div>
+
       <div class="page" id="page-feedback">
         <div class="card" style="max-width:480px">
           <div class="card-header"><h3>Submit Feedback</h3></div>
@@ -1250,6 +1327,7 @@ const pageTitles = {
   brief:     "Daily Brief",
   alerts:    "Alerts",
   feedback:  "Feedback",
+  commodities: "Commodities — Strategic Inputs",
 };
 const pageLoaders = {
   dashboard:  loadDashboard,
@@ -1260,6 +1338,7 @@ const pageLoaders = {
   narratives: loadNarratives,
   brief:      loadBrief,
   alerts:     loadAlerts,
+  commodities: loadCommodities,
 };
 
 function navigate(page) {
@@ -2415,6 +2494,181 @@ async function runAlertSweep() {
     loadDashboard();
   } catch (err) {
     showToast("Error: " + err.message, "error");
+  }
+}
+
+// ─── Commodities ──────────────────────────────────────────────────────────
+function _cmTierBadge(tier) {
+  const colors = {1: "#58a6ff", 2: "#f0883e", 3: "#a371f7"};
+  const c = colors[tier] || "#888";
+  return `<span style="display:inline-block; padding:1px 7px; border-radius:10px;
+    background:${c}22; color:${c}; font-size:10px; font-weight:600">T${tier}</span>`;
+}
+function _cmNetBar(net) {
+  const v   = Math.max(-1, Math.min(1, net));
+  const pct = Math.abs(v) * 100;
+  const color = v > 0 ? "#f85149" : (v < 0 ? "#3fb950" : "#666");  // bullish-commodity = red for downstream
+  const sign  = v > 0 ? "+" : "";
+  return `<div style="display:flex; align-items:center; gap:6px; justify-content:flex-end">
+    <span style="font-variant-numeric:tabular-nums; color:${color}; font-size:11px">${sign}${net.toFixed(3)}</span>
+    <div style="width:50px; height:6px; background:rgba(255,255,255,.05); border-radius:3px; overflow:hidden">
+      <div style="width:${pct}%; height:100%; background:${color}"></div>
+    </div>
+  </div>`;
+}
+function _cmPct(v) {
+  if (v === null || v === undefined) return "—";
+  return `<span style="font-variant-numeric:tabular-nums; color:var(--muted)">${(v*100).toFixed(0)}%</span>`;
+}
+
+async function loadCommodities() {
+  const status = document.getElementById("cm-status");
+  const tier   = document.getElementById("cm-tier").value;
+  const hours  = document.getElementById("cm-hours").value || "72";
+  status.textContent = "Loading…";
+
+  const body  = document.getElementById("cm-heatmap-body");
+  body.innerHTML = `<tr><td colspan="12" style="text-align:center; color:var(--muted2)">Loading…</td></tr>`;
+
+  try {
+    const rows = await api(`/commodities/heatmap?hours=${hours}`);
+    const filtered = tier ? rows.filter(r => r.tier === parseInt(tier)) : rows;
+
+    if (!filtered.length) {
+      body.innerHTML = `<tr><td colspan="12" style="text-align:center; color:var(--muted2); padding:24px">
+        No commodities found for this tier.</td></tr>`;
+      status.textContent = "0 commodities";
+      return;
+    }
+
+    body.innerHTML = filtered.map(r => `
+      <tr style="cursor:pointer" onclick="showCommodityDetail('${r.symbol}')">
+        <td>${_cmTierBadge(r.tier)}</td>
+        <td><strong>${r.symbol}</strong></td>
+        <td>${r.name}</td>
+        <td style="color:var(--muted)">${r.category || "—"}</td>
+        <td style="color:var(--muted)">${r.proxy_ticker || "—"}</td>
+        <td style="text-align:right">${_cmPct(r.supplier_concentration)}</td>
+        <td style="text-align:right">${_cmPct(r.policy_sensitivity)}</td>
+        <td style="text-align:right">${_cmPct(r.ai_demand_linkage)}</td>
+        <td style="text-align:right">${_cmNetBar(r.net_signal)}</td>
+        <td style="text-align:right; color:var(--muted)">${(r.max_severity||0).toFixed(2)}</td>
+        <td style="text-align:right">${r.signal_count
+            ? `<span style="color:var(--accent); font-weight:600">${r.signal_count}</span>`
+            : `<span style="color:var(--muted2)">0</span>`}</td>
+        <td style="color:var(--muted); font-size:11px">${r.top_signal_type || "—"}</td>
+      </tr>
+    `).join("");
+    const active = filtered.filter(r => r.signal_count > 0).length;
+    status.textContent = `${filtered.length} tracked · ${active} active in window`;
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="12" style="text-align:center; color:#f85149; padding:24px">
+      Error loading commodities: ${e.message}</td></tr>`;
+    status.textContent = "Error";
+  }
+}
+
+async function showCommodityDetail(symbol) {
+  const title = document.getElementById("cm-detail-title");
+  const body  = document.getElementById("cm-detail-body");
+  title.textContent = `Commodity Detail — ${symbol}`;
+  body.innerHTML = `<div class="loading"><span class="spinner"></span>Loading ${symbol}…</div>`;
+
+  try {
+    const hours = document.getElementById("cm-hours").value || "168";
+    const [commodity, signals, exposed] = await Promise.all([
+      api(`/commodities/${symbol}`),
+      api(`/commodities/${symbol}/signals?hours=${hours}`),
+      api(`/commodities/${symbol}/exposed-tickers`),
+    ]);
+
+    title.innerHTML = `Commodity Detail — ${_cmTierBadge(commodity.tier)} <strong>${commodity.symbol}</strong>
+      <span style="color:var(--muted); font-weight:400"> — ${commodity.name}</span>`;
+
+    const metaCards = `
+      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:8px; margin-bottom:14px">
+        <div class="card" style="margin:0"><div class="card-body" style="padding:8px 10px">
+          <div style="font-size:10px; color:var(--muted2); text-transform:uppercase">Category</div>
+          <div style="font-size:13px">${commodity.category || "—"}</div></div></div>
+        <div class="card" style="margin:0"><div class="card-body" style="padding:8px 10px">
+          <div style="font-size:10px; color:var(--muted2); text-transform:uppercase">Unit</div>
+          <div style="font-size:13px">${commodity.unit || "—"}</div></div></div>
+        <div class="card" style="margin:0"><div class="card-body" style="padding:8px 10px">
+          <div style="font-size:10px; color:var(--muted2); text-transform:uppercase">Proxy</div>
+          <div style="font-size:13px">${commodity.proxy_ticker || "—"}</div></div></div>
+        <div class="card" style="margin:0"><div class="card-body" style="padding:8px 10px">
+          <div style="font-size:10px; color:var(--muted2); text-transform:uppercase">Supplier&nbsp;HHI</div>
+          <div style="font-size:13px">${_cmPct(commodity.supplier_concentration)}</div></div></div>
+        <div class="card" style="margin:0"><div class="card-body" style="padding:8px 10px">
+          <div style="font-size:10px; color:var(--muted2); text-transform:uppercase">Policy&nbsp;Sens.</div>
+          <div style="font-size:13px">${_cmPct(commodity.policy_sensitivity)}</div></div></div>
+        <div class="card" style="margin:0"><div class="card-body" style="padding:8px 10px">
+          <div style="font-size:10px; color:var(--muted2); text-transform:uppercase">AI&nbsp;Linkage</div>
+          <div style="font-size:13px">${_cmPct(commodity.ai_demand_linkage)}</div></div></div>
+      </div>
+      <div style="margin-bottom:14px; font-size:12px; color:var(--muted)">
+        <strong>Primary geographies:</strong> ${commodity.primary_geographies || "—"}<br>
+        <strong>Exposed tickers:</strong> ${commodity.exposed_tickers || "—"}
+      </div>
+    `;
+
+    const signalsHtml = signals.length === 0
+      ? `<div style="color:var(--muted2); font-size:12px; padding:8px">No signals in window.</div>`
+      : `<table style="margin-top:6px">
+          <thead><tr>
+            <th>Time</th><th>Signal Type</th><th style="text-align:right">Dir</th>
+            <th style="text-align:right">Severity</th><th style="text-align:right">Conf</th>
+            <th>Summary</th><th style="text-align:right">Event</th>
+          </tr></thead>
+          <tbody>
+            ${signals.map(s => `
+              <tr>
+                <td style="font-size:11px; color:var(--muted)">${new Date(s.timestamp).toLocaleString()}</td>
+                <td><span style="font-size:11px; padding:1px 6px; background:rgba(88,166,255,.1); border-radius:3px">${s.signal_type}</span></td>
+                <td style="text-align:right; font-weight:600; color:${s.direction>0?'#f85149':(s.direction<0?'#3fb950':'#888')}">
+                  ${s.direction>0?'+':''}${s.direction}
+                </td>
+                <td style="text-align:right; font-variant-numeric:tabular-nums">${s.severity.toFixed(2)}</td>
+                <td style="text-align:right; font-variant-numeric:tabular-nums; color:var(--muted)">${s.confidence.toFixed(2)}</td>
+                <td style="font-size:11px; color:var(--muted)">${s.summary || ""}</td>
+                <td style="text-align:right">${s.event_id
+                    ? `<a href="#" onclick="openEvent(${s.event_id});return false" style="color:var(--accent)">#${s.event_id}</a>`
+                    : "—"}</td>
+              </tr>`).join("")}
+          </tbody>
+        </table>`;
+
+    const exposedHtml = (!exposed.exposed || exposed.exposed.length === 0)
+      ? `<div style="color:var(--muted2); font-size:12px; padding:8px">No exposed tickers in tracked universe.</div>`
+      : `<table style="margin-top:6px">
+          <thead><tr>
+            <th>Ticker</th>
+            <th style="text-align:right">Opportunity</th>
+            <th style="text-align:right">Risk</th>
+            <th style="text-align:right">Indirect Impact</th>
+            <th>Decision</th>
+          </tr></thead>
+          <tbody>
+            ${exposed.exposed.map(t => `
+              <tr>
+                <td><strong>${t.ticker}</strong></td>
+                <td style="text-align:right; font-variant-numeric:tabular-nums">${t.opportunity_score!=null?t.opportunity_score.toFixed(3):"—"}</td>
+                <td style="text-align:right; font-variant-numeric:tabular-nums">${t.risk_score!=null?t.risk_score.toFixed(3):"—"}</td>
+                <td style="text-align:right; font-variant-numeric:tabular-nums">${t.indirect_impact_score!=null?t.indirect_impact_score.toFixed(3):"—"}</td>
+                <td style="font-size:11px; color:var(--muted)">${t.decision_bucket || "—"}</td>
+              </tr>`).join("")}
+          </tbody>
+        </table>`;
+
+    body.innerHTML = `
+      ${metaCards}
+      <h4 style="margin:14px 0 4px; font-size:13px; color:var(--text)">Recent Signals (${signals.length})</h4>
+      ${signalsHtml}
+      <h4 style="margin:18px 0 4px; font-size:13px; color:var(--text)">Downstream Exposed Tickers</h4>
+      ${exposedHtml}
+    `;
+  } catch (e) {
+    body.innerHTML = `<div style="color:#f85149; padding:8px">Error loading ${symbol}: ${e.message}</div>`;
   }
 }
 

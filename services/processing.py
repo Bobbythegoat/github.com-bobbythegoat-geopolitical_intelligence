@@ -36,6 +36,7 @@ import re
 import math
 import time
 from collections import defaultdict, deque
+from datetime import datetime, timedelta
 from typing import Dict, List, Set, Tuple
 
 from sqlalchemy.orm import Session
@@ -687,6 +688,18 @@ def process_article(article_id: int, session: Session):
     except Exception as e:
         print(f"[narrative_inflection] Warning: {e}")
 
+    # ── Commodity & strategic-input tracking ──────────────────────────────
+    # Scans this article for tier-1/2/3 commodity signals (copper, uranium,
+    # gallium, neon, photoresist, etc.) and writes both CommoditySignal rows
+    # and synthetic EventTickerImpact entries against the commodity symbol.
+    # The second_order engine below then propagates the shock to every
+    # exposed downstream ticker via the seeded commodity_input edges.
+    try:
+        from services.commodity_tracker import link_event_to_commodities
+        link_event_to_commodities(article_id, session)
+    except Exception as e:
+        print(f"[commodity_tracker] Warning: {e}")
+
     # ── Phase 2+: Second-Order Impact ─────────────────────────────────────
     try:
         from services.second_order import update_stock_indirect_scores
@@ -723,6 +736,40 @@ def process_article(article_id: int, session: Session):
     _update_stock_scores(session)
 
 
+def _event_recency_decay(event: db.Event) -> float:
+    """
+    Time-decay multiplier for an event's contribution to stock scores.
+    Events older than EVENT_SCORE_MAX_AGE_DAYS are excluded entirely.
+
+    Decay schedule:
+      0–1 days  → 1.00 (full weight)
+      1–3 days  → 0.80 (slightly stale)
+      3–7 days  → 0.40 (significantly stale)
+      7+ days   → 0.00 (excluded)
+    """
+    EVENT_SCORE_MAX_AGE_DAYS = 7
+    if event is None:
+        return 1.0
+    # Event has a single `timestamp` column (set on creation, advanced on
+    # cluster updates). Older drafts referenced last_updated_at/first_seen_at,
+    # which never existed on the ORM model.
+    ref_ts = getattr(event, "timestamp", None)
+    if not ref_ts:
+        return 1.0
+    # SQLAlchemy returns naive UTC datetimes here; compare against utcnow().
+    if ref_ts.tzinfo is not None:
+        ref_ts = ref_ts.replace(tzinfo=None)
+    age_days = (datetime.utcnow() - ref_ts).total_seconds() / 86400.0
+    if age_days >= EVENT_SCORE_MAX_AGE_DAYS:
+        return 0.0
+    if age_days <= 1.0:
+        return 1.0
+    if age_days <= 3.0:
+        return 1.0 - 0.20 * ((age_days - 1.0) / 2.0)   # 1.0 → 0.80
+    # 3–7 days: 0.80 → 0.05
+    return max(0.05, 0.80 - 0.75 * ((age_days - 3.0) / 4.0))
+
+
 def _update_stock_scores(session: Session):
     """
     Recompute StockScore for every ticker that has causal impact data.
@@ -734,6 +781,7 @@ def _update_stock_scores(session: Session):
     • impact_score   = credibility-weighted directional causal impact
     • risk_score     = credibility-weighted RMS of causal impact scores
     • All scores now driven by explicit economic mechanisms, not keyword density
+    • Recency decay: events older than 7 days are excluded; 3–7 days are downweighted
     """
     all_impacts = session.query(db.EventTickerImpact).all()
     if not all_impacts:
@@ -748,6 +796,8 @@ def _update_stock_scores(session: Session):
     ev_cred    = {e.event_id: e.credibility_score  for e in events}
     ev_stage   = {e.event_id: e.narrative_stage    for e in events}
     events_map = {e.event_id: e                    for e in events}  # Phase 2+
+    # Recency decay per event — events older than 7 days are excluded/downweighted
+    ev_decay   = {e.event_id: _event_recency_decay(e) for e in events}
 
     # Narrative-stage → estimated price-reaction lag
     # Emerging events have high lag (market hasn't priced in yet)
@@ -773,22 +823,46 @@ def _update_stock_scores(session: Session):
         pass
 
     for ticker_sym, impacts in impacts_by_ticker.items():
+        # Filter out fully-decayed (stale) impacts before aggregation
+        active_impacts = [
+            i for i in impacts
+            if ev_decay.get(i.event_id, 1.0) > 0.0
+        ]
+        if not active_impacts:
+            # All events for this ticker are stale — reset to neutral
+            score_row = existing_scores.get(ticker_sym)
+            if score_row:
+                score_row.opportunity_score = 0.0
+                score_row.crowding_score    = 0.0
+                score_row.risk_score        = 0.0
+                score_row.exposure_score    = 0.0
+                score_row.impact_score      = 0.0
+                score_row.decision_bucket   = "Watch"
+            continue
+
+        impacts = active_impacts
+
         ticker_event_ids = [i.event_id for i in impacts]
         ticker_stages    = [ev_stage.get(eid, "emerging") for eid in ticker_event_ids]
 
-        total_abs = sum(abs(i.impact_score) for i in impacts) or 1e-9
+        # Apply decay to raw impact scores before aggregation
+        decayed_scores = [
+            i.impact_score * ev_decay.get(i.event_id, 1.0)
+            for i in impacts
+        ]
+        total_abs = sum(abs(s) for s in decayed_scores) or 1e-9
 
         # Credibility-weighted mean credibility
         avg_credibility = sum(
-            ev_cred.get(i.event_id, 0.5) * abs(i.impact_score)
-            for i in impacts
+            ev_cred.get(i.event_id, 0.5) * abs(decayed_scores[j])
+            for j, i in enumerate(impacts)
         ) / total_abs
 
         # Credibility-weighted RMS impact (risk proxy)
         rms_impact = math.sqrt(
             sum(
-                ev_cred.get(i.event_id, 0.5) * (i.impact_score ** 2)
-                for i in impacts
+                ev_cred.get(i.event_id, 0.5) * (decayed_scores[j] ** 2)
+                for j, i in enumerate(impacts)
             ) / max(len(impacts), 1)
         )
 
@@ -810,8 +884,9 @@ def _update_stock_scores(session: Session):
         narrative_val = round({"emerging": 1.0, "developing": 0.75, "peak": 0.40, "declining": 0.15}.get(narrative, 0.5), 4)
         lag_val       = round(lag, 4)
         # Asymmetry: positive impacts vs negative (bullish bias = positive asymmetry)
-        pos_impact    = sum(abs(i.impact_score) for i in impacts if i.impact_score > 0)
-        neg_impact    = sum(abs(i.impact_score) for i in impacts if i.impact_score < 0)
+        # Uses decay-adjusted scores so stale events don't skew direction
+        pos_impact    = sum(abs(s) for s in decayed_scores if s > 0)
+        neg_impact    = sum(abs(s) for s in decayed_scores if s < 0)
         total_impact  = pos_impact + neg_impact or 1e-9
         asymmetry_val = round((pos_impact - neg_impact) / total_impact, 4)
 

@@ -17,7 +17,26 @@ import json as _json
 import os
 import logging
 import threading
+import warnings
 from contextlib import asynccontextmanager
+
+# ---------------------------------------------------------------------------
+# Library noise suppression (must run before importing the libraries below)
+# ---------------------------------------------------------------------------
+# yfinance prints raw "HTTP Error 404: ..." lines via its own logger and emits
+# DeprecationWarnings for `Ticker.earnings` from internal helpers we don't call
+# directly. Pydantic v2 also warns when a field name starts with `model_`.
+# These are all noise we don't act on, so quiet them globally.
+logging.getLogger("yfinance").setLevel(logging.CRITICAL)
+warnings.filterwarnings(
+    "ignore",
+    category=DeprecationWarning,
+    module=r"yfinance(\..*)?",
+)
+warnings.filterwarnings(
+    "ignore",
+    message=r'Field "model_.*" .* has conflict with protected namespace "model_"',
+)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,7 +44,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 
 from database import create_tables
-from routers import events, stocks, alerts, briefs, admin
+from routers import events, stocks, alerts, briefs, admin, commodities
 
 # Global lock prevents concurrent ingestion cycles (scheduler + manual refresh)
 _INGEST_LOCK = threading.Lock()
@@ -346,6 +365,16 @@ async def lifespan(app: FastAPI):
         from services.learning import ensure_weights_exist
         ensure_weights_exist(session)
 
+        # Step 3b: Seed commodity registry + commodity→ticker transmission edges
+        print("Seeding strategic-commodity registry...")
+        from services.commodity_tracker import (
+            seed_commodities, seed_commodity_relationship_edges,
+        )
+        n_commod = seed_commodities(session)
+        n_cedges = seed_commodity_relationship_edges(session)
+        if n_commod or n_cedges:
+            print(f"  Commodities: +{n_commod} new, commodity edges: +{n_cedges}")
+
         # Step 4a: ETF universe sweep (runs in background to not block startup)
         threading.Thread(target=_background_etf_sweep, daemon=True).start()
 
@@ -402,6 +431,7 @@ app.include_router(stocks.router)
 app.include_router(alerts.router)
 app.include_router(briefs.router)
 app.include_router(admin.router)
+app.include_router(commodities.router)
 
 
 # ---------------------------------------------------------------------------

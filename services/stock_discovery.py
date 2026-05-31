@@ -38,11 +38,21 @@ _COMPANY_RE = re.compile(
     r'Enterprises?|Group|Capital|Photonics?|Electronics?)\b'
 )
 
-# Ticker in parentheses: "...Company Name (TICK)..."
-_PAREN_TICKER_RE = re.compile(r'\b(?:NYSE|NASDAQ|LSE|TSX|HKEX)?:?\s*\(?([A-Z]{2,5})\)?(?:\s*[,\.)])')
+# Ticker in parentheses immediately following a (likely) company name token.
+# We require a parenthesised ALL-CAPS ticker preceded by a capitalised word —
+# this avoids matching standalone acronyms like "UCLA," or "OPEC."
+_PAREN_TICKER_RE = re.compile(
+    r'(?:[A-Z][A-Za-z][A-Za-z\.\-&]*|\.)\s*'
+    r'\((?:NYSE|NASDAQ|LSE|TSX|HKEX|TYO|TSE|SHA|SHE)?:?\s*([A-Z]{1,5})\)'
+)
 
-# Explicit exchange prefix: "NYSE: TICK"
-_EXCHANGE_RE = re.compile(r'(?:NYSE|NASDAQ|LSE|TSX):\s*([A-Z]{2,5})\b')
+# Explicit exchange prefix: "NYSE: TICK" / "NASDAQ:TICK"
+_EXCHANGE_RE = re.compile(
+    r'\b(?:NYSE|NASDAQ|LSE|TSX|HKEX|TYO|TSE|SHA|SHE):\s*([A-Z]{1,5})\b'
+)
+
+# Cashtag form used on financial sites/socials: "$NVDA"
+_CASHTAG_RE = re.compile(r'\$([A-Z]{1,5})\b')
 
 _NOISE = {
     "The United", "The Federal", "The European", "The American",
@@ -51,11 +61,63 @@ _NOISE = {
     "Main Street", "Federal Reserve", "European Union", "United Nations",
 }
 
+# Acronyms that look like tickers but are organisations, products, weapons,
+# economic concepts, country codes, etc. yfinance will happily 404 on these
+# (or worse, return a stale low-volume foreign listing). Filter at extraction
+# time so we never call yfinance for them.
+_ACRONYM_BLOCKLIST = {
+    # Government / military / political / NGO acronyms
+    "USA", "USD", "UK", "EU", "UN", "NATO", "OPEC", "WTO", "IMF", "WHO",
+    "CIA", "FBI", "NSA", "DOJ", "DOD", "DOE", "EPA", "FDA", "FTC", "SEC",
+    "FCC", "CDC", "IRS", "DHS", "ICE", "TSA", "GSA", "NIH", "USDA", "FAA",
+    "CBP", "ATF", "OFAC", "BIS", "CFIUS", "CFPB", "GAO", "OMB", "USAID",
+    "PRC", "DPRK", "ROK", "ROC", "IRGC", "PLA", "IDF", "RUF", "FSA",
+    "ISIS", "ISIL", "PKK", "PFLP", "RNA", "DNA",
+    "GDP", "GNP", "CPI", "PPI", "PMI", "M1", "M2", "PCE", "FOMC",
+    "ECB", "BOE", "BOJ", "PBOC", "RBI", "RBNZ", "RBA", "BIS", "BOC",
+    # Universities / NGOs / press orgs
+    "MIT", "NYU", "USC", "UCLA", "UCSD", "UCSB", "UCSF", "UCB", "UCI",
+    "USC", "BYU", "TCU", "SMU", "VCU", "BU", "GW", "FSU", "UF", "UM",
+    "AHRC", "NDIS", "SPLC", "ACLU", "NRA", "NAACP", "AARP", "RNC", "DNC",
+    "GOP", "PAC", "SuperPAC",
+    # Cartels, terror groups, military programs (will not have tickers)
+    "CJNG", "MS13", "FARC", "ELN", "AQ", "AQAP", "AQIM",
+    # Weapons / military programs / standards
+    "JDAM", "MOSA", "JADC2", "JEDI", "PNT", "AESA", "SAM", "ATGM",
+    "ICBM", "MIRV", "SLBM", "ASW", "AWACS", "RPV", "UAV", "UAS",
+    "IED", "VBIED", "EW",
+    # Common english and tech acronyms that yfinance tries to resolve
+    "AI", "ML", "NLP", "AR", "VR", "XR", "IT", "HR", "PR", "QA",
+    "PDF", "HTML", "CSS", "JS", "API", "SDK", "GUI", "CLI", "OS",
+    "URL", "DNS", "IP", "TCP", "UDP", "SSL", "TLS", "VPN", "CDN",
+    "FAQ", "TOS", "EULA", "CEO", "CFO", "CTO", "COO", "CMO", "CIO",
+    "CSO", "EVP", "SVP", "VP", "PM", "PR", "BD", "RD", "QC",
+    # Misc commonly mis-extracted
+    "SUSE", "RHEL", "RHEL", "MSCIO", "SPR", "BRICS",
+    # File / code formats
+    "JSON", "XML", "YAML", "YML", "CSV", "TSV", "JPG", "PNG", "GIF",
+    # Time / date abbreviations
+    "EST", "EDT", "PST", "PDT", "GMT", "UTC", "CST", "MST",
+    # Other
+    "SAR", "SAS", "BAR", "AAR", "RIP",
+}
+
 
 # ── Entity extraction ────────────────────────────────────────────────────────
 
 def extract_company_mentions(text: str) -> List[str]:
-    """Extract candidate company names / tickers from raw article text."""
+    """
+    Extract candidate company names / tickers from raw article text.
+
+    The bare 2-5 letter pattern is intentionally NOT used here — too many
+    organisation/military/economic acronyms (UCLA, OPEC, JDAM, GDP, …) match
+    that shape and waste yfinance lookups on guaranteed 404s. We only accept:
+      • Capitalised company names with a recognised legal suffix
+      • Tickers wrapped in parentheses *after* a likely company name token
+      • Tickers with an explicit exchange prefix (NYSE: TICK)
+      • Cashtags ($NVDA)
+    Each candidate is filtered against `_ACRONYM_BLOCKLIST`.
+    """
     candidates: set = set()
 
     for m in _COMPANY_RE.finditer(text):
@@ -64,10 +126,24 @@ def extract_company_mentions(text: str) -> List[str]:
             candidates.add(name)
 
     for m in _PAREN_TICKER_RE.finditer(text):
-        candidates.add(m.group(1))
+        sym = m.group(1)
+        if sym in _ACRONYM_BLOCKLIST:
+            continue
+        if len(sym) < 2:        # skip single-letter false positives
+            continue
+        candidates.add(sym)
 
     for m in _EXCHANGE_RE.finditer(text):
-        candidates.add(m.group(1))
+        sym = m.group(1)
+        if sym in _ACRONYM_BLOCKLIST or len(sym) < 2:
+            continue
+        candidates.add(sym)
+
+    for m in _CASHTAG_RE.finditer(text):
+        sym = m.group(1)
+        if sym in _ACRONYM_BLOCKLIST or len(sym) < 2:
+            continue
+        candidates.add(sym)
 
     return list(candidates)
 
@@ -79,6 +155,8 @@ def validate_ticker_yfinance(symbol_or_name: str) -> Optional[Dict]:
     Validate a symbol or company name with yfinance.
     Returns {ticker, company_name, sector, market_cap} or None.
     """
+    if symbol_or_name in _ACRONYM_BLOCKLIST:
+        return None
     try:
         import yfinance as yf
 

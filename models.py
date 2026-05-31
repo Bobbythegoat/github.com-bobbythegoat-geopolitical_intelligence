@@ -9,7 +9,7 @@ Phase 2+ additions:
   - OutcomeReviewIn       : User outcome review submission
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -407,6 +407,10 @@ class DiscoveredTickerOut(BaseModel):
 # ---------------------------------------------------------------------------
 
 class MLModelInfo(BaseModel):
+    # `model_*` collides with Pydantic v2's protected namespace; opt out so we
+    # keep the field name without triggering the runtime warning.
+    model_config = ConfigDict(protected_namespaces=())
+
     model_available:          bool
     trained_at:               Optional[str]
     n_training_samples:       int
@@ -419,7 +423,59 @@ class MLModelInfo(BaseModel):
     ready_to_train:           bool
 
 
+# ---------------------------------------------------------------------------
+# Commodities & Strategic Inputs
+# ---------------------------------------------------------------------------
+
+class CommodityOut(BaseModel):
+    symbol: str
+    name: str
+    tier: int
+    category: Optional[str] = None
+    unit: Optional[str] = None
+    proxy_ticker: Optional[str] = None
+    supplier_concentration: float = 0.0
+    policy_sensitivity: float = 0.0
+    ai_demand_linkage: float = 0.0
+    primary_geographies: Optional[str] = None
+    exposed_tickers: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class CommoditySignalOut(BaseModel):
+    id: int
+    commodity_symbol: str
+    event_id: Optional[int] = None
+    article_id: Optional[int] = None
+    signal_type: str
+    direction: int
+    severity: float
+    confidence: float
+    summary: Optional[str] = None
+    timestamp: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CommodityHeatmapRow(BaseModel):
+    symbol: str
+    name: str
+    tier: int
+    category: Optional[str] = None
+    proxy_ticker: Optional[str] = None
+    supplier_concentration: float
+    policy_sensitivity: float
+    ai_demand_linkage: float
+    net_signal: float
+    max_severity: float
+    signal_count: int
+    top_signal_type: Optional[str] = None
+
+
 class MLPredictionOut(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     outcome:             Dict[str, float]   # {"profitable": p, "neutral": p, "unprofitable": p}
     direction:           Dict[str, float]   # {"up": p, "flat": p, "down": p}
     predicted_outcome:   str

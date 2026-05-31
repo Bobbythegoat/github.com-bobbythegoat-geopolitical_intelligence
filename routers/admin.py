@@ -135,6 +135,56 @@ def manual_universe_sweep(session: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/bulk-label", summary="Batch-label all pending outcome samples")
+def trigger_bulk_label():
+    """
+    Labels all pending AlertOutcome records by fetching all tickers at once
+    via yfinance batch download — orders of magnitude faster than the regular
+    outcome sweep which makes one API call per record.
+
+    Use this when you have 100+ pending samples that need to be labeled before
+    training the ML model. Runs synchronously; may take 30-120s for large batches.
+    """
+    from services.outcome_tracker import bulk_label_samples
+    s = SessionLocal()
+    try:
+        result = bulk_label_samples(s)
+        return {
+            "status": "ok" if "error" not in result else "error",
+            "labeled":        result.get("labeled", 0),
+            "updated":        result.get("updated", 0),
+            "skipped":        result.get("skipped", 0),
+            "total_pending":  result.get("total_pending", 0),
+            "tickers_fetched": result.get("tickers_fetched", 0),
+            "error":          result.get("error"),
+            "completed_at":   datetime.utcnow().isoformat(),
+        }
+    finally:
+        s.close()
+
+
+@router.post("/ml/train", summary="Train ML model on current labeled outcomes")
+def trigger_ml_train(session: Session = Depends(get_db)):
+    """Alias for /admin/retrain — provided for consistency."""
+    from services.ml_predictor import train_model
+    result = train_model(session)
+    return {
+        "status": "trained" if result.get("trained") else "skipped",
+        "n_samples":            result.get("n_samples", 0),
+        "outcome_cv_accuracy":  result.get("outcome_cv_accuracy"),
+        "direction_cv_accuracy": result.get("direction_cv_accuracy"),
+        "reason":               result.get("reason"),
+        "trained_at":           result.get("trained_at"),
+    }
+
+
+@router.get("/ml/info", summary="ML model metadata")
+def get_ml_info(session: Session = Depends(get_db)):
+    """Return model training info without triggering retraining."""
+    from services.ml_predictor import get_model_info
+    return get_model_info(session)
+
+
 @router.get("/status", summary="System health and ingestion status")
 def get_status(session: Session = Depends(get_db)):
     """

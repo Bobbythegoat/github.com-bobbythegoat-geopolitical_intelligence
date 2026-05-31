@@ -305,6 +305,70 @@ class RelationshipEdge(Base):
     updated_at       = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
+class Commodity(Base):
+    """
+    Strategic commodity / industrial input being tracked.
+
+    Tiers (from product spec):
+      tier 1 — high importance, easy to track (copper, nat gas, uranium,
+               aluminum, lithium, nickel) — LME data, COT positioning,
+               liquid futures.
+      tier 2 — strategic choke points (gallium, germanium, indium, rare
+               earths, graphite) — policy-sensitive, processing concentration.
+      tier 3 — semiconductor hidden bottlenecks (neon, argon, krypton,
+               xenon, photoresists, etchants, CMP slurries, ultra-pure
+               water) — tracked via supplier earnings, fab capex,
+               geopolitical disruption.
+
+    `exposed_tickers` is a comma-separated list of tickers that have material
+    revenue/cost exposure to this commodity. RelationshipEdge rows are seeded
+    from this list so commodity shocks propagate through the existing
+    second-order transmission engine.
+    """
+    __tablename__ = "commodities"
+
+    id                       = Column(Integer, primary_key=True, index=True)
+    symbol                   = Column(String(32), unique=True, nullable=False, index=True)
+    name                     = Column(String(128), nullable=False)
+    tier                     = Column(Integer, nullable=False)        # 1 | 2 | 3
+    category                 = Column(String(64))                     # metal | energy | gas | chemical | rare_earth
+    unit                     = Column(String(32))                     # USD/lb, USD/mmBtu, USD/kg ...
+    proxy_ticker             = Column(String(16), nullable=True)      # ETF/futures ETF proxy
+    supplier_concentration   = Column(Float, default=0.0)             # HHI-like [0,1]; 1 = single-country choke
+    policy_sensitivity       = Column(Float, default=0.0)             # [0,1]; export-control exposure
+    ai_demand_linkage        = Column(Float, default=0.0)             # [0,1]; how tightly tied to AI/data-center scaling
+    primary_geographies      = Column(String(512))                    # CSV: Chile,Indonesia,China,DRC,Russia ...
+    exposed_tickers          = Column(String(1024))                   # CSV of tickers with material exposure
+    keywords                 = Column(Text)                           # CSV / JSON list of detection keywords
+    notes                    = Column(Text)
+    updated_at               = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                                                 onupdate=lambda: datetime.now(timezone.utc))
+
+
+class CommoditySignal(Base):
+    """
+    A detected commodity-relevant signal extracted from an article/event.
+
+    signal_type:
+      supply_disruption | export_control | stockpiling | capacity_expansion
+      | price_move | policy_action | geopolitical_risk | demand_shock
+    direction: +1 (bullish for commodity price), -1 (bearish), 0 (uncertain)
+    severity:  [0,1] — how material the signal is
+    """
+    __tablename__ = "commodity_signals"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    commodity_symbol= Column(String(32), ForeignKey("commodities.symbol"), index=True)
+    event_id        = Column(Integer, ForeignKey("events.event_id"), nullable=True, index=True)
+    article_id      = Column(Integer, ForeignKey("articles.id"), nullable=True)
+    signal_type     = Column(String(48), nullable=False)
+    direction       = Column(Integer, default=0)       # +1 / -1 / 0
+    severity        = Column(Float, default=0.0)       # [0,1]
+    confidence      = Column(Float, default=0.5)       # [0,1]
+    summary         = Column(Text)
+    timestamp       = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+
 class DiscoveredTicker(Base):
     """
     Tickers discovered dynamically from article text (beyond hardcoded universe).

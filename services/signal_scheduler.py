@@ -16,7 +16,7 @@ Job 2 — start_daily_scan_loop(scan_hour=16, scan_minute=30):
 import logging
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import List, Optional
 
 import database as db
 from database import SessionLocal
@@ -49,13 +49,31 @@ def _get_ingest_lock():
 # ---------------------------------------------------------------------------
 
 def start_rescoring_loop(interval_minutes: int = 30):
-    """Run re-scoring every interval_minutes. Designed for daemon thread."""
+    """Run re-scoring every interval_minutes. Designed for daemon thread.
+
+    Also runs run_event_staleness_cleanup() once every 24 hours to mark old
+    events as stale and prune their EventTickerImpact rows.
+    """
+    _last_cleanup_time: Optional[datetime] = None
+
     while True:
         time.sleep(interval_minutes * 60)
         try:
             run_rescore_cycle()
         except Exception as e:
             logger.error("Re-score cycle failed: %s", e)
+
+        # Run staleness cleanup at most once per 24 hours
+        now = datetime.now(timezone.utc)
+        if (
+            _last_cleanup_time is None
+            or (now - _last_cleanup_time).total_seconds() >= 86400
+        ):
+            try:
+                run_event_staleness_cleanup()
+                _last_cleanup_time = now
+            except Exception as e:
+                logger.error("Staleness cleanup failed: %s", e)
 
 
 def run_rescore_cycle() -> dict:
@@ -121,15 +139,26 @@ def run_rescore_cycle() -> dict:
                 if event is None:
                     continue
 
+                # Clamp inputs to OpportunityFactors' declared bounds.
+                # momentum_30d is signed (can be negative) but price_reaction_lag
+                # requires [0,1]; rel_strength_90d can overshoot ±1 but
+                # asymmetry requires [-1,1]; vol_regime ratio can blow past 1.
+                _exposure  = min(max(abs(best_impact.impact_score or 0), 0.0), 1.0)
+                _cred      = min(max(event.credibility_score or 0.5,    0.0), 1.0)
+                _lag       = min(max(price_ctx.get("momentum_30d", 0.0), 0.0), 1.0)
+                _asym      = min(max(price_ctx.get("rel_strength_90d", 0.0), -1.0), 1.0)
+                _crowd     = min(max((event.source_count or 1) / 20.0,  0.0), 1.0)
+                _risk      = min(max(price_ctx.get("vol_regime", 1.0) / 5.0, 0.0), 1.0)
+
                 factors = OpportunityFactors(
-                    exposure=abs(best_impact.impact_score or 0),
-                    credibility=event.credibility_score or 0.5,
+                    exposure=_exposure,
+                    credibility=_cred,
                     expectation_gap=0.0,          # neutral default
                     indirect_impact=0.0,
-                    price_reaction_lag=price_ctx.get("momentum_30d", 0.0),   # underreaction proxy
-                    asymmetry=price_ctx.get("rel_strength_90d", 0.0),
-                    crowding=min((event.source_count or 1) / 20.0, 1.0),
-                    risk=price_ctx.get("vol_regime", 1.0) / 5.0,             # normalize vol to [0,1]
+                    price_reaction_lag=_lag,       # underreaction proxy
+                    asymmetry=_asym,
+                    crowding=_crowd,
+                    risk=_risk,
                     narrative_stage=event.narrative_stage or "peak",
                 )
 
@@ -157,11 +186,17 @@ def run_rescore_cycle() -> dict:
 
         session.commit()
 
-        # Alert sweep: check all events with credibility > 0.5
+        # Alert sweep: check credible events from the last 7 days only.
+        # Excluding stale events prevents re-triggering alerts for months-old
+        # events that no longer have market relevance.
         try:
+            seven_days_ago = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=7)
             credible_events = (
                 session.query(db.Event)
-                .filter(db.Event.credibility_score > 0.5)
+                .filter(
+                    db.Event.credibility_score > 0.5,
+                    db.Event.timestamp >= seven_days_ago,
+                )
                 .all()
             )
             for event in credible_events:
@@ -199,6 +234,78 @@ def run_rescore_cycle() -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Staleness cleanup
+# ---------------------------------------------------------------------------
+
+def run_event_staleness_cleanup(session=None) -> dict:
+    """
+    Housekeeping pass that:
+      1. Marks events older than 21 days as narrative_stage = "stale" if not
+         already marked.
+      2. Removes EventTickerImpact rows linked to stale events so they are
+         excluded from the active scoring window.
+
+    Returns a dict: {events_marked_stale, impacts_removed}
+    """
+    owned_session = session is None
+    if owned_session:
+        session = SessionLocal()
+
+    events_marked_stale = 0
+    impacts_removed = 0
+
+    try:
+        cutoff_21d = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=21)
+
+        # Find events older than 21 days that are not already marked stale
+        old_events = (
+            session.query(db.Event)
+            .filter(
+                db.Event.timestamp < cutoff_21d,
+                db.Event.narrative_stage != "stale",
+            )
+            .all()
+        )
+
+        stale_ids = []
+        for event in old_events:
+            event.narrative_stage = "stale"
+            stale_ids.append(event.event_id)
+            events_marked_stale += 1
+
+        if stale_ids:
+            # Remove EventTickerImpact rows for stale events
+            deleted = (
+                session.query(db.EventTickerImpact)
+                .filter(db.EventTickerImpact.event_id.in_(stale_ids))
+                .delete(synchronize_session=False)
+            )
+            impacts_removed = deleted or 0
+
+        if owned_session:
+            session.commit()
+
+        logger.info(
+            "Staleness cleanup: %d events marked stale, %d impacts removed",
+            events_marked_stale, impacts_removed,
+        )
+        return {
+            "events_marked_stale": events_marked_stale,
+            "impacts_removed": impacts_removed,
+        }
+
+    except Exception as e:
+        if owned_session:
+            session.rollback()
+        logger.error("Staleness cleanup failed: %s", e)
+        return {"events_marked_stale": 0, "impacts_removed": 0}
+
+    finally:
+        if owned_session:
+            session.close()
+
+
+# ---------------------------------------------------------------------------
 # Job 2: Daily anomaly scan loop
 # ---------------------------------------------------------------------------
 
@@ -230,19 +337,93 @@ def start_daily_scan_loop(scan_hour: int = 16, scan_minute: int = 30):
 def run_daily_anomaly_scan() -> dict:
     """
     Detect unusual price/volume moves and create synthetic events.
-    Returns {tickers_scanned, anomalies_found, events_created}
+    Returns {tickers_scanned, anomalies_found, events_created, predictions_created}
     """
     import numpy as np
     import yfinance as yf
+    from services.anomaly_predictor import batch_predict_anomalies
 
     session = SessionLocal()
     tickers_scanned = 0
     anomalies_found = 0
     events_created  = 0
+    predictions_created = 0
 
     try:
         tickers = session.query(db.Ticker).limit(MAX_TICKERS_PER_SCAN).all()
 
+        # --- Pre-anomaly prediction pass ---
+        # Run BEFORE the post-hoc detection so users see signals in advance.
+        all_ticker_syms = [t.ticker for t in tickers]
+        try:
+            predictions = batch_predict_anomalies(all_ticker_syms, session)
+        except Exception as e:
+            logger.warning("[DailyScan] Pre-anomaly prediction pass failed: %s", e)
+            predictions = []
+
+        for pred in predictions:
+            if pred["prediction_score"] < 0.35:
+                continue   # only surface moderate+ predictions
+            ticker_sym = pred["ticker"]
+            try:
+                # Check for existing pre_anomaly event in last 24h for this ticker
+                cutoff_24h = datetime.utcnow() - timedelta(hours=24)
+                existing_pred = (
+                    session.query(db.Event)
+                    .join(db.EventTickerImpact, db.EventTickerImpact.event_id == db.Event.event_id)
+                    .filter(
+                        db.EventTickerImpact.ticker == ticker_sym,
+                        db.Event.event_type == "pre_anomaly",
+                        db.Event.timestamp >= cutoff_24h,
+                    )
+                    .first()
+                )
+                if existing_pred:
+                    logger.debug(
+                        "Skipping duplicate pre_anomaly for %s (event %d already exists)",
+                        ticker_sym, existing_pred.event_id,
+                    )
+                    continue
+
+                direction_word = (
+                    "bullish" if pred["direction"] > 0
+                    else ("bearish" if pred["direction"] < 0 else "neutral")
+                )
+                event = db.Event(
+                    title=f"Pre-Anomaly Signal: {ticker_sym} ({direction_word})",
+                    event_type="pre_anomaly",
+                    narrative_stage="emerging",
+                    credibility_score=round(pred["prediction_score"], 3),
+                    summary=pred["reasoning"],
+                    source_count=1,
+                )
+                session.add(event)
+                session.flush()
+
+                impact = db.EventTickerImpact(
+                    event_id=event.event_id,
+                    ticker=ticker_sym,
+                    impact_score=round(pred["direction"] * pred["prediction_score"], 3),
+                )
+                session.add(impact)
+                session.flush()
+                session.commit()
+                predictions_created += 1
+
+                logger.info(
+                    "Pre-anomaly event created for %s (score=%.3f, direction=%s)",
+                    ticker_sym, pred["prediction_score"], direction_word,
+                )
+
+                try:
+                    try_trigger_alert(event.event_id, session)
+                except Exception:
+                    pass
+
+            except Exception as e:
+                logger.warning("Failed to persist pre-anomaly prediction for %s: %s", ticker_sym, e)
+
+        # --- Post-hoc anomaly detection (existing logic) ---
         for ticker_row in tickers:
             ticker_sym = ticker_row.ticker
             tickers_scanned += 1
@@ -340,13 +521,75 @@ def run_daily_anomaly_scan() -> dict:
                 logger.warning("Anomaly scan failed for ticker %s: %s", ticker_sym, e)
 
         logger.info(
-            "Daily anomaly scan complete: %d scanned, %d anomalies, %d events created",
-            tickers_scanned, anomalies_found, events_created,
+            "Daily anomaly scan complete: %d scanned, %d anomalies, %d events created, "
+            "%d pre-anomaly predictions created",
+            tickers_scanned, anomalies_found, events_created, predictions_created,
         )
         return {
-            "tickers_scanned": tickers_scanned,
-            "anomalies_found": anomalies_found,
-            "events_created":  events_created,
+            "tickers_scanned":     tickers_scanned,
+            "anomalies_found":     anomalies_found,
+            "events_created":      events_created,
+            "predictions_created": predictions_created,
+        }
+
+    finally:
+        session.close()
+
+
+# ---------------------------------------------------------------------------
+# API-callable: on-demand pre-anomaly prediction
+# ---------------------------------------------------------------------------
+
+def run_anomaly_prediction_now(tickers: List[str] = None) -> dict:
+    """
+    Run pre-anomaly prediction right now (callable from API or manually).
+
+    Args:
+        tickers: Optional list of ticker symbols to run predictions for.
+                 If None, uses all tickers in the database (up to MAX_TICKERS_PER_SCAN).
+
+    Returns:
+        {
+            "predictions": List[dict],   # sorted by score desc, score >= 0.25
+            "tickers_evaluated": int,
+            "predictions_found": int,
+            "duration_seconds": float,
+        }
+    """
+    import time as _time
+    from services.anomaly_predictor import batch_predict_anomalies
+
+    start_time = _time.monotonic()
+    session = SessionLocal()
+
+    try:
+        if tickers is None:
+            ticker_rows = session.query(db.Ticker).limit(MAX_TICKERS_PER_SCAN).all()
+            tickers = [t.ticker for t in ticker_rows]
+
+        predictions = batch_predict_anomalies(tickers, session)
+
+        duration = round(_time.monotonic() - start_time, 2)
+        logger.info(
+            "run_anomaly_prediction_now: evaluated %d tickers, %d predictions (score>=0.25), %.2fs",
+            len(tickers), len(predictions), duration,
+        )
+        return {
+            "predictions":       predictions,
+            "tickers_evaluated": len(tickers),
+            "predictions_found": len(predictions),
+            "duration_seconds":  duration,
+        }
+
+    except Exception as e:
+        logger.error("run_anomaly_prediction_now failed: %s", e)
+        duration = round(_time.monotonic() - start_time, 2)
+        return {
+            "predictions":       [],
+            "tickers_evaluated": len(tickers) if tickers else 0,
+            "predictions_found": 0,
+            "duration_seconds":  duration,
+            "error":             str(e),
         }
 
     finally:

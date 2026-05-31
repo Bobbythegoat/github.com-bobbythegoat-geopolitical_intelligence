@@ -380,25 +380,176 @@ def _auto_label(outcome: db.AlertOutcome, alert: db.Alert,
 # Batch update (for periodic sweep)
 # ---------------------------------------------------------------------------
 
-def run_outcome_update_sweep(session: Session, max_records: int = 50) -> int:
+def run_outcome_update_sweep(session: Session, max_records: int = 200) -> int:
     """
     Update forward returns for the oldest pending outcome records.
     Called periodically (e.g. daily).
     Returns number of records updated.
     """
-    pending = (
+    q = (
         session.query(db.AlertOutcome)
         .filter_by(outcome_label="pending")
         .order_by(db.AlertOutcome.timestamp)
-        .limit(max_records)
-        .all()
     )
+    if max_records is not None:
+        q = q.limit(max_records)
+    pending = q.all()
     updated = 0
     for record in pending:
         result = update_forward_returns(record.id, session)
         if result and result.outcome_label != "pending":
             updated += 1
     return updated
+
+
+def bulk_label_samples(session: Session, max_age_days: int = 90) -> dict:
+    """
+    Efficiently labels all pending outcomes by batch-fetching prices for all
+    tickers at once with yfinance.download() instead of one API call per record.
+
+    This is the fast path for labeling 100-1000+ samples — reduces N yfinance
+    API calls down to a single batch request per ticker group.
+
+    Returns dict with counts: updated, labeled, skipped, total_pending.
+    """
+    try:
+        import yfinance as yf
+    except ImportError:
+        return {"error": "yfinance not available", "updated": 0, "labeled": 0}
+
+    cutoff = datetime.utcnow() - timedelta(days=max_age_days)
+    pending = (
+        session.query(db.AlertOutcome)
+        .filter(db.AlertOutcome.outcome_label == "pending")
+        .all()
+    )
+
+    if not pending:
+        return {"updated": 0, "labeled": 0, "skipped": 0, "total_pending": 0,
+                "message": "No pending outcomes found"}
+
+    tickers = list({o.ticker for o in pending if o.ticker})
+    if not tickers:
+        return {"updated": 0, "labeled": 0, "skipped": 0, "total_pending": len(pending),
+                "message": "No valid tickers in pending outcomes"}
+
+    print(f"[bulk_label] Fetching price history for {len(tickers)} tickers, {len(pending)} pending outcomes...")
+
+    # Single batch download for all tickers — drastically faster than individual calls
+    hist_by_ticker: dict = {}
+    try:
+        if len(tickers) == 1:
+            raw = yf.download(tickers[0], period="3mo", interval="1d", progress=False)
+            if not raw.empty:
+                hist_by_ticker[tickers[0]] = raw
+        else:
+            raw = yf.download(tickers, period="3mo", interval="1d",
+                              group_by="ticker", progress=False, threads=True)
+            for t in tickers:
+                try:
+                    ticker_df = raw[t] if len(tickers) > 1 else raw
+                    if not ticker_df.empty:
+                        hist_by_ticker[t] = ticker_df
+                except (KeyError, Exception):
+                    pass
+    except Exception as e:
+        return {"error": f"yfinance batch download failed: {e}", "updated": 0, "labeled": 0}
+
+    updated = 0
+    labeled = 0
+    skipped = 0
+
+    for outcome in pending:
+        if not outcome.ticker:
+            skipped += 1
+            continue
+
+        ticker_hist = hist_by_ticker.get(outcome.ticker)
+        if ticker_hist is None or ticker_hist.empty:
+            skipped += 1
+            continue
+
+        try:
+            alert = session.get(db.Alert, outcome.alert_id)
+            if not alert:
+                skipped += 1
+                continue
+
+            alert_ts = alert.timestamp
+            now = datetime.utcnow()
+            elapsed = (now - alert_ts).total_seconds() / 3600.0
+
+            closes = ticker_hist["Close"].tolist()
+            dates = [d.to_pydatetime() for d in ticker_hist.index]
+
+            # Find baseline price at alert date
+            baseline_price = None
+            for i, d in enumerate(dates):
+                d_date = d.date() if hasattr(d, "date") else d
+                if d_date >= alert_ts.date():
+                    baseline_price = closes[i]
+                    break
+
+            if not baseline_price or baseline_price == 0:
+                skipped += 1
+                continue
+
+            def _ret(n_days: int):
+                target_date = (alert_ts + timedelta(days=n_days)).date()
+                for i, d in enumerate(dates):
+                    d_date = d.date() if hasattr(d, "date") else d
+                    if d_date >= target_date and i < len(closes):
+                        return round((closes[i] - baseline_price) / baseline_price, 5)
+                return None
+
+            outcome.forward_return_1d = _ret(1)  if elapsed >= 24  else None
+            outcome.forward_return_3d = _ret(3)  if elapsed >= 72  else None
+            outcome.forward_return_1w = _ret(5)  if elapsed >= 120 else None
+            outcome.forward_return_1m = _ret(21) if elapsed >= 504 else None
+
+            # Compute excursion stats
+            window_closes = []
+            start_date = alert_ts.date()
+            end_date = (alert_ts + timedelta(days=7)).date()
+            for i, d in enumerate(dates):
+                d_date = d.date() if hasattr(d, "date") else d
+                if start_date <= d_date <= end_date:
+                    window_closes.append(closes[i])
+
+            if len(window_closes) > 1:
+                rets = [(c - baseline_price) / baseline_price for c in window_closes]
+                outcome.max_favorable_excursion = round(max(rets), 5)
+                outcome.max_adverse_excursion   = round(min(rets), 5)
+                vol = _std(rets)
+                mean_ret = sum(rets) / len(rets)
+                outcome.realized_volatility = round(vol, 5)
+                outcome.realized_sharpe_proxy = (
+                    round(mean_ret / max(vol, 0.001), 4) if vol else None
+                )
+
+            outcome.outcome_label = _auto_label(outcome, alert, session=session)
+            updated += 1
+            if outcome.outcome_label != "pending":
+                labeled += 1
+
+        except Exception as e:
+            skipped += 1
+            continue
+
+    try:
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        return {"error": f"Commit failed: {e}", "updated": updated, "labeled": labeled}
+
+    print(f"[bulk_label] Done: {labeled} labeled, {updated} updated, {skipped} skipped")
+    return {
+        "updated": updated,
+        "labeled": labeled,
+        "skipped": skipped,
+        "total_pending": len(pending),
+        "tickers_fetched": len(hist_by_ticker),
+    }
 
 
 # ---------------------------------------------------------------------------

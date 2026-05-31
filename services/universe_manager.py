@@ -14,6 +14,7 @@ Called from:
 """
 
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
 
@@ -325,3 +326,112 @@ def get_universe_status(session: Session) -> Dict[str, Any]:
         "by_sector": by_sector,
         "tickers": ticker_list,
     }
+
+
+# ---------------------------------------------------------------------------
+# Layer 4: SEC EDGAR full-company universe bootstrap
+# ---------------------------------------------------------------------------
+
+def load_sec_universe(
+    session: Session,
+    min_market_cap: float = 2_000_000_000,
+    limit: int = 500,
+) -> int:
+    """
+    Bootstrap the ticker universe from SEC EDGAR's full company list.
+
+    Downloads company_tickers.json (all SEC-registered companies with tickers)
+    and validates each against yfinance for market cap >= min_market_cap.
+
+    This is the path to scaling from 65 tickers to 6000+.
+    Runs conservatively: limit controls how many are processed per call.
+    Returns count of newly added tickers.
+
+    NOTE: This is designed to be called incrementally. Call multiple times
+    (increasing offset via an offset param or by running daily) to build up
+    the full universe over time without hammering the APIs.
+    """
+    try:
+        import yfinance as yf  # noqa: F401 — validate import before proceeding
+    except ImportError:
+        logger.warning("universe_manager: yfinance not installed; skipping SEC universe load")
+        return 0
+
+    try:
+        from services.sec_filing_analyzer import load_sec_company_registry
+    except ImportError:
+        logger.warning("universe_manager: sec_filing_analyzer not available; skipping SEC universe load")
+        return 0
+
+    # Step 1: Load (or use cached) CIK → ticker registry
+    registry = load_sec_company_registry(max_companies=max(limit * 4, 6000))
+    if not registry:
+        logger.warning("universe_manager: SEC company registry is empty; nothing to load")
+        return 0
+
+    # registry maps cik → ticker; we need unique tickers with a company name lookup
+    # Rebuild a deduplicated ticker → (cik, company_name) mapping from the registry
+    # The registry may contain duplicate tickers (one entry per CIK representation),
+    # so collect unique ticker symbols.
+    seen_tickers: set = set()
+    ticker_list_from_registry: List[str] = []
+    for _cik, tkr in registry.items():
+        if tkr and tkr not in seen_tickers:
+            seen_tickers.add(tkr)
+            ticker_list_from_registry.append(tkr)
+        if len(ticker_list_from_registry) >= limit * 2:
+            break
+
+    new_count = 0
+    processed = 0
+
+    for symbol in ticker_list_from_registry:
+        if processed >= limit:
+            break
+
+        symbol = symbol.strip().upper()
+        if not symbol or len(symbol) > 10:
+            continue
+
+        # Fast path: skip if already in universe
+        existing = session.get(db.Ticker, symbol)
+        if existing is not None:
+            continue
+
+        # Validate with yfinance
+        try:
+            import yfinance as yf
+            fi = yf.Ticker(symbol).fast_info
+            market_cap = getattr(fi, "market_cap", None) or getattr(fi, "marketCap", None)
+            market_cap = float(market_cap) if market_cap else None
+        except Exception as exc:
+            logger.debug("universe_manager: yfinance error for %s: %s", symbol, exc)
+            time.sleep(0.05)
+            processed += 1
+            continue
+
+        time.sleep(0.05)
+        processed += 1
+
+        if not market_cap or market_cap < min_market_cap:
+            logger.debug(
+                "universe_manager: skipping %s — market cap $%.0fM below threshold",
+                symbol, (market_cap or 0) / 1e6,
+            )
+            continue
+
+        added = _upsert_ticker(
+            session=session,
+            symbol=symbol,
+            company_name=None,
+            sector=None,
+            source="sec_edgar",
+        )
+        if added:
+            new_count += 1
+
+    logger.info(
+        "universe_manager: SEC universe load complete — %d new tickers added (processed=%d)",
+        new_count, processed,
+    )
+    return new_count

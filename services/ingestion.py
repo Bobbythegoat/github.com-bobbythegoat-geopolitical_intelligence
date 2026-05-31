@@ -30,8 +30,14 @@ After storing, each article is automatically:
 import hashlib
 import re
 import socket
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional, Set
+
+
+# Maximum age (hours) of an article to accept from RSS feeds.
+# Articles published more than this many hours ago are discarded — they no longer
+# move markets and only inflate "active events" with stale signal.
+MAX_ARTICLE_AGE_HOURS: int = 36
 
 # Global timeout for all RSS fetches (seconds). Prevents any single feed
 # from hanging startup. feedparser respects socket timeouts.
@@ -126,6 +132,15 @@ NOISE_BLOCKLIST: List[str] = [
     "quarterly earnings beat expectations",  # too generic
     # Sports
     "nfl", "nba", "mlb", "nhl", "soccer", "football score",
+    # Political entertainment / personality gossip (no market impact)
+    "reality show", "faces backlash", "television appearance", "book deal",
+    "speaking tour", "political rally", "campaign launch", "running for",
+    "presidential ambition", "senate race", "election campaign",
+    # Mass casualty events with no market link
+    "mass shooting", "school shooting", "shooting remembered", "vigil for",
+    # Sports misclassifications
+    "world cup qualifier", "casting votes", "election result",
+    "voting begins", "polls open", "ballot count",
 ]
 
 # Compiled for speed
@@ -185,39 +200,60 @@ COMPANY_RELEVANCE_ANCHORS: Set[str] = {
 }
 
 
+# Market transmission keywords — at least ONE must appear for non-strict sources
+# (unless the article already matches a company anchor) to ensure the article
+# describes an actual economic mechanism, not just a geopolitical existence.
+MARKET_TRANSMISSION_KEYWORDS: Set[str] = {
+    "trade", "export", "import", "sanction", "tariff", "embargo", "ban",
+    "supply chain", "revenue", "earnings", "profit", "loss", "contract",
+    "restriction", "chip", "semiconductor", "oil", "crude", "gas",
+    "interest rate", "fed rate", "rate hike", "rate cut", "bond yield",
+    "market", "stock", "share price", "investor", "investment",
+    "gdp", "recession", "inflation", "capital", "merger", "acquisition",
+    "ipo", "filing", "guidance", "forecast", "subsidy", "penalty", "fine",
+    "regulation", "antitrust", "export control", "technology ban",
+    "defense contract", "weapons sale", "arms deal",
+}
+
+
 # ---------------------------------------------------------------------------
 # Default RSS sources (curated for geopolitical/market intelligence)
 # ---------------------------------------------------------------------------
 
 DEFAULT_FEEDS = [
     # ── Breaking News Wire Services (highest priority — catches presidential actions) ──
+    # Reuters retired feeds.reuters.com in 2020. Use the Yahoo-hosted Reuters
+    # mirror plus the Google News topic feed as drop-in replacements.
     {
-        "name": "Reuters World News",
-        "url": "https://feeds.reuters.com/reuters/worldnews",
+        "name": "Reuters via Google News (World)",
+        "url": "https://news.google.com/rss/search?q=site:reuters.com+when:1d&hl=en-US&gl=US&ceid=US:en",
         "is_primary": 1,
         "strict_filter": False,   # wire service: news judgment is already editorial
     },
     {
-        "name": "Reuters Business News",
-        "url": "https://feeds.reuters.com/reuters/businessNews",
+        "name": "Reuters via Google News (Business)",
+        "url": "https://news.google.com/rss/search?q=site:reuters.com+business+when:1d&hl=en-US&gl=US&ceid=US:en",
         "is_primary": 1,
         "strict_filter": False,
     },
     {
-        "name": "Reuters Technology",
-        "url": "https://feeds.reuters.com/reuters/technologyNews",
+        "name": "Reuters via Google News (Technology)",
+        "url": "https://news.google.com/rss/search?q=site:reuters.com+technology+when:1d&hl=en-US&gl=US&ceid=US:en",
         "is_primary": 1,
         "strict_filter": False,
     },
     {
+        # rsshub.app is rate-limited and currently returns HTML error pages
+        # that feedparser rejects with a syntax error. Use Google News' AP
+        # topic mirror, which is stable and authenticated-free.
         "name": "AP News Top Stories",
-        "url": "https://rsshub.app/apnews/topics/apf-topnews",
+        "url": "https://news.google.com/rss/search?q=site:apnews.com+when:1d&hl=en-US&gl=US&ceid=US:en",
         "is_primary": 1,
         "strict_filter": False,   # AP is a primary wire — catch everything that passes noise filter
     },
     {
         "name": "AP Business News",
-        "url": "https://rsshub.app/apnews/topics/apf-business",
+        "url": "https://news.google.com/rss/search?q=site:apnews.com+business+when:1d&hl=en-US&gl=US&ceid=US:en",
         "is_primary": 1,
         "strict_filter": False,
     },
@@ -295,8 +331,10 @@ DEFAULT_FEEDS = [
         "strict_filter": True,
     },
     {
+        # Investopedia's feedbuilder endpoint now serves a malformed XML page;
+        # mirror via Google News until they fix it.
         "name": "Investopedia News",
-        "url": "https://www.investopedia.com/feedbuilder/feed/getfeed/?feedName=rss_headline",
+        "url": "https://news.google.com/rss/search?q=site:investopedia.com+when:1d&hl=en-US&gl=US&ceid=US:en",
         "is_primary": 0,
         "strict_filter": True,
     },
@@ -314,8 +352,10 @@ DEFAULT_FEEDS = [
         "strict_filter": True,
     },
     {
+        # AnandTech's site shut down editorial in mid-2024 and the feed now
+        # returns malformed XML; mirror via Google News.
         "name": "AnandTech",
-        "url": "https://www.anandtech.com/rss/",
+        "url": "https://news.google.com/rss/search?q=site:anandtech.com+when:7d&hl=en-US&gl=US&ceid=US:en",
         "is_primary": 0,
         "strict_filter": True,
     },
@@ -436,6 +476,16 @@ def _has_company_relevance(headline: str, content: str) -> bool:
     return any(anchor in text for anchor in COMPANY_RELEVANCE_ANCHORS)
 
 
+def _has_market_impact(headline: str, content: str) -> bool:
+    """
+    Return True if at least one MARKET_TRANSMISSION_KEYWORDS term appears in
+    the headline or content.  This ensures non-strict source articles describe
+    an actual economic mechanism rather than pure geopolitical existence.
+    """
+    text = (headline + " " + content).lower()
+    return any(kw in text for kw in MARKET_TRANSMISSION_KEYWORDS)
+
+
 def _passes_relevance_gate(headline: str, content: str,
                             strict: bool) -> bool:
     """
@@ -465,8 +515,12 @@ def _passes_relevance_gate(headline: str, content: str,
         return has_company and hits >= MIN_RELEVANCE_HITS
 
     # Non-strict feeds (official sources, trade press):
-    # Accept if company-relevant OR has strong keyword signal (3+)
-    return has_company or hits >= MIN_RELEVANCE_HITS
+    # Accept if:
+    #   (a) Company anchor present AND at least 2 keyword hits, OR
+    #   (b) Market transmission keyword present AND at least 3 keyword hits.
+    # Pure geopolitical news without any economic mechanism gets filtered.
+    has_market = _has_market_impact(headline, content)
+    return (has_company and hits >= 2) or (has_market and hits >= MIN_RELEVANCE_HITS)
 
 
 # ---------------------------------------------------------------------------
@@ -524,7 +578,17 @@ def ingest_rss_feed(feed_url: str, source_name: str, session: Session,
     old_timeout = socket.getdefaulttimeout()
     socket.setdefaulttimeout(_FEED_TIMEOUT_SECONDS)
     try:
-        feed = feedparser.parse(feed_url)
+        # SEC EDGAR rejects requests without a real User-Agent (returns an
+        # error page that fails XML parsing). Several other publishers also
+        # block the default feedparser UA. Pass a descriptive UA on every
+        # fetch — required per https://www.sec.gov/os/accessing-edgar-data.
+        feed = feedparser.parse(
+            feed_url,
+            agent=(
+                "GeopoliticalIntelligence/1.0 "
+                "(contact: augustus.soedarmono@gmail.com)"
+            ),
+        )
     except Exception as e:
         print(f"  ERROR fetching {source_name}: {e}")
         return []
@@ -583,6 +647,14 @@ def ingest_rss_feed(feed_url: str, source_name: str, session: Session,
             except Exception:
                 ts = datetime.utcnow()
 
+        # ── Freshness gate ────────────────────────────────────────────────
+        # Reject articles published more than MAX_ARTICLE_AGE_HOURS ago.
+        # Stale articles no longer move markets and add noise to event clusters.
+        age_hours = (datetime.utcnow() - ts).total_seconds() / 3600.0
+        if age_hours > MAX_ARTICLE_AGE_HOURS:
+            filtered_out += 1
+            continue
+
         article = db.Article(
             source=source_name,
             url=fp,
@@ -604,6 +676,50 @@ def ingest_rss_feed(feed_url: str, source_name: str, session: Session,
             )
         except Exception as _ce:
             pass  # non-critical — event_class stays at default
+
+        # ── SEC EDGAR deep filing analysis ────────────────────────────────
+        # Only run for EDGAR sources — fetches the actual filing document and
+        # enriches the article content with a structured analysis block.
+        if "SEC EDGAR" in source_name or "sec.gov" in feed_url:
+            try:
+                from services.sec_filing_analyzer import analyze_filing
+                analysis = analyze_filing(entry, session)
+                if analysis and analysis.material_score > 0.3:
+                    article = session.get(db.Article, article.id)
+                    if article:
+                        direction_label = (
+                            "bullish" if analysis.impact_direction > 0
+                            else "bearish" if analysis.impact_direction < 0
+                            else "neutral"
+                        )
+                        disclosures_block = "\n".join(
+                            f"- {s}" for s in analysis.key_disclosures[:5]
+                        )
+                        guidance_line = ""
+                        if analysis.guidance_signals.get("raised"):
+                            guidance_line = "Guidance: RAISED\n"
+                        elif analysis.guidance_signals.get("lowered"):
+                            guidance_line = "Guidance: LOWERED\n"
+                        risk_line = ""
+                        if analysis.risk_flags:
+                            risk_line = (
+                                "Risk Flags: "
+                                + "; ".join(analysis.risk_flags[:3])
+                                + "\n"
+                            )
+                        article.content = (
+                            f"[SEC FILING ANALYSIS]\n"
+                            f"Company: {analysis.company_name} ({analysis.ticker})\n"
+                            f"Form: {analysis.form_type} | Items: {', '.join(analysis.items_found)}\n"
+                            f"Impact: {analysis.primary_event_class} | Direction: {direction_label}\n\n"
+                            f"Summary: {analysis.analysis_summary}\n\n"
+                            f"Key Disclosures:\n{disclosures_block}\n\n"
+                            + guidance_line
+                            + risk_line
+                        )
+                        session.commit()
+            except Exception as sec_e:
+                pass  # non-critical — article is still stored without analysis
 
         try:
             _post_process(article.id, session)
