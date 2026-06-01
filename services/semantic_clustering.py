@@ -26,6 +26,15 @@ def _get_model():
     global _model
     if _model is None:
         try:
+            # Pin torch to a single thread before loading the model. Combined
+            # with OMP_NUM_THREADS=1 (set in main.py), this avoids the macOS
+            # libomp segfault when torch's OpenMP pool is created from a
+            # background thread alongside xgboost's OpenMP pool.
+            try:
+                import torch
+                torch.set_num_threads(1)
+            except Exception:
+                pass
             from sentence_transformers import SentenceTransformer
             _model = SentenceTransformer(_MODEL_NAME)
             logger.info("Loaded sentence transformer: %s", _MODEL_NAME)

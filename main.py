@@ -15,6 +15,22 @@ Then open:
 import math
 import json as _json
 import os
+
+# ── Stability: constrain OpenMP BEFORE torch / xgboost are ever imported ──────
+# torch and xgboost each bundle an OpenMP runtime (libomp). When both spin up
+# OpenMP thread teams from different background threads at the same time
+# (feed ingestion loading the sentence-transformer model + ML training), macOS
+# segfaults inside libomp (__kmp_launch_worker / __kmp_fork_barrier). That crash
+# kills the uvicorn worker; under --reload the parent keeps the port open, so
+# the browser connects but never gets a response — the "page only buffers" bug.
+# Forcing a single OpenMP thread and tolerating a duplicate libomp prevents it.
+# (setdefault so an explicit override from the environment still wins.)
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("OMP_MAX_ACTIVE_LEVELS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
 import logging
 import threading
 import warnings
