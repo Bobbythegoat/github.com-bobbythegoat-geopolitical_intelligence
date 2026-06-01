@@ -176,6 +176,64 @@ def _scheduled_ingest(interval_minutes: int = 30):
         time.sleep(interval_minutes * 60)
 
 
+def _background_bootstrap(is_first_run: bool):
+    """
+    One-shot startup bootstrap, run in a single background thread so lifespan()
+    can yield immediately (server serves requests right away).
+
+    The one-time, write-heavy seeding runs *to completion first*, THEN the
+    recurring writer threads (ETF sweep, ingestion, scheduler) are started.
+    Sequencing matters: SQLite allows only one writer at a time, so launching
+    seeding and the recurring writers simultaneously caused 'database is locked'
+    contention and rolled-back seed transactions. Ordering the writes removes it.
+    """
+    from database import SessionLocal
+    from services.learning import ensure_weights_exist
+    from services.second_order import seed_relationship_graph
+    from services.commodity_tracker import seed_commodities, seed_commodity_relationship_edges
+
+    # ── Phase 1: one-time seeding (sequential, must finish before recurring writers) ──
+    s = SessionLocal()
+    try:
+        if is_first_run:
+            print("Empty database detected — seeding sample data...")
+            from seed_data import seed
+            seed(s)
+            print("[bootstrap] Seed complete.")
+
+        n_edges = seed_relationship_graph(s)
+        if n_edges:
+            print(f"[bootstrap] Added {n_edges} new relationship edges.")
+
+        ensure_weights_exist(s)
+
+        n_commod = seed_commodities(s)
+        n_cedges = seed_commodity_relationship_edges(s)
+        if n_commod or n_cedges:
+            print(f"[bootstrap] Commodities: +{n_commod} new, commodity edges: +{n_cedges}")
+
+        print("[bootstrap] Seeding done.")
+    except Exception as e:
+        print(f"[bootstrap] seeding error: {e}")
+    finally:
+        s.close()
+
+    # ── Phase 2: start recurring background workers (after seeding settles) ──
+    try:
+        from database import SessionLocal as _SL
+        from services import signal_scheduler
+        threading.Thread(target=_background_etf_sweep, daemon=True).start()
+        threading.Thread(target=_background_ml,        args=(_SL,), daemon=True).start()
+        threading.Thread(target=_background_ingest,    daemon=True).start()
+        threading.Thread(target=_scheduled_ingest,     args=(30,),  daemon=True).start()
+        threading.Thread(target=signal_scheduler.start_rescoring_loop,  daemon=True).start()
+        threading.Thread(target=signal_scheduler.start_daily_scan_loop, daemon=True).start()
+        print("[bootstrap] Background workers started "
+              "(ETF sweep, ML, ingestion, scheduler).")
+    except Exception as e:
+        print(f"[bootstrap] worker start error: {e}")
+
+
 def _background_etf_sweep():
     import time
     time.sleep(5)   # let ingestion start first
@@ -338,7 +396,8 @@ def _migrate_db():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialise DB, seed if empty, then pull live news feeds."""
+    """Initialise DB schema, then hand all slow work to background threads."""
+    # Tier 1: fast, synchronous DB-only operations — complete before yielding
     create_tables()
     _migrate_db()
 
@@ -346,54 +405,18 @@ async def lifespan(app: FastAPI):
     from sqlalchemy import text
     session = SessionLocal()
     try:
-        # Step 1: Seed sample data only on very first launch (empty DB)
         count = session.execute(text("SELECT COUNT(*) FROM tickers")).scalar()
-        if count == 0:
-            print("Empty database detected — seeding sample data...")
-            from seed_data import seed
-            seed(session)
-            print("Seed complete.")
-
-        # Step 2: Seed relationship graph (idempotent — skips existing edges)
-        print("Seeding second-order relationship graph...")
-        from services.second_order import seed_relationship_graph
-        n_edges = seed_relationship_graph(session)
-        if n_edges:
-            print(f"  Added {n_edges} new relationship edges.")
-
-        # Step 3: Initialise adaptive factor weights if not present
-        from services.learning import ensure_weights_exist
-        ensure_weights_exist(session)
-
-        # Step 3b: Seed commodity registry + commodity→ticker transmission edges
-        print("Seeding strategic-commodity registry...")
-        from services.commodity_tracker import (
-            seed_commodities, seed_commodity_relationship_edges,
-        )
-        n_commod = seed_commodities(session)
-        n_cedges = seed_commodity_relationship_edges(session)
-        if n_commod or n_cedges:
-            print(f"  Commodities: +{n_commod} new, commodity edges: +{n_cedges}")
-
-        # Step 4a: ETF universe sweep (runs in background to not block startup)
-        threading.Thread(target=_background_etf_sweep, daemon=True).start()
-
-        # Steps 4, 5 & 6 run in background threads — server is ready immediately
-        from database import SessionLocal as _SL
-        threading.Thread(target=_background_ml,      args=(_SL,), daemon=True).start()
-        threading.Thread(target=_background_ingest,  daemon=True).start()
-        threading.Thread(target=_scheduled_ingest,   args=(30,),  daemon=True).start()
-        from services import signal_scheduler
-        threading.Thread(target=signal_scheduler.start_rescoring_loop,  daemon=True).start()
-        threading.Thread(target=signal_scheduler.start_daily_scan_loop, daemon=True).start()
-        print("Signal scheduler: re-scoring every 30 min, daily anomaly scan at 16:30.")
-        print("Server ready. ML training and feed ingestion running in background.")
-        print("Scheduled re-ingestion: every 30 minutes to keep stock scores fresh.")
-
-    except Exception as e:
-        print(f"Startup error: {e}")
+    except Exception:
+        count = 0
     finally:
         session.close()
+
+    # Tier 2: all slow work runs off the event loop. A single bootstrap thread
+    # seeds the DB (sequentially), then starts the recurring writer threads — so
+    # the server yields immediately AND concurrent writers don't fight over the
+    # SQLite write lock during seeding.
+    threading.Thread(target=_background_bootstrap, args=(count == 0,), daemon=True).start()
+    print("Server ready. Seeding, ML training, and feed ingestion running in background.")
 
     yield
     # Shutdown: nothing to clean up for SQLite

@@ -18,6 +18,15 @@ from datetime import datetime, timezone
 DATABASE_URL = "sqlite:///./geoint.db"
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+
+from sqlalchemy import event as _sa_event
+
+@_sa_event.listens_for(engine, "connect")
+def _set_sqlite_pragmas(dbapi_conn, _):
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA busy_timeout=5000")
+    cursor.close()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 class Base(DeclarativeBase):

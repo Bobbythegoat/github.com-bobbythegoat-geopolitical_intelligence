@@ -3,8 +3,12 @@ __pycache__/
 *.pyc
 *.pyo
 *.db
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
+*.pkl
+.ai-runs/
 .env
 .claude/
 *.log
